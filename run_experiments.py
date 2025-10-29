@@ -109,5 +109,5 @@ if __name__=="__main__":
     # save results
     if not "results" in os.listdir():
         os.mkdir("results")
-    with open(f"results/{args.model_client}_{args.environment}_{len(target_actions)}_{args.adversarial_agent}_{'safe' if args.safe else ''}_{'_GUARDIAN' if args.guardian else ''}{args.id if args.id else ""}.json", "w") as f:
+    with open(f"results/{args.model_client}_{args.environment}_{len(target_actions)}_{args.adversarial_agent}_{'safe' if args.safe else ''}_{'_GUARDIAN' if args.guardian else ''}{args.id if args.id else ''}.json", "w") as f:
         json.dump(results, f)
