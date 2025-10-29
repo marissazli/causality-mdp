@@ -1,0 +1,11 @@
+autogen_agentchat==0.5.6
+autogen_core==0.5.6
+autogen_ext[ollama]==0.5.6
+autogen_ext[openai]==0.5.6
+deepspeed==0.16.7
+openai==1.78.1
+peft==0.15.2
+setuptools==75.8.0
+torch==2.6.0
+tqdm==4.67.1
+pandas
