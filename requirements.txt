@@ -9,3 +9,4 @@ setuptools==75.8.0
 torch==2.6.0
 tqdm==4.67.1
 pandas
+autogen-ext[docker]==0.5.6
