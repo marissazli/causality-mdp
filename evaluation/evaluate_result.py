@@ -54,7 +54,7 @@ if __name__ == "__main__":
 
     # select correct evaluation function
     eval_fn = {
-        "travel_planner": evaluate_travel_planning,
+        "travel_planning": evaluate_travel_planning,
         "financial_article_writing": evaluate_financial_article_writing,
         "code_generation": lambda dp: evaluate_code_generation(dp, dp["keywords"]),
         "multi_agent_debate": evaluate_MAD,
