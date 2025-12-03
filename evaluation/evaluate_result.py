@@ -11,6 +11,7 @@ from evaluation_functions import (
     evaluate_MAD,
 )
 
+
 if __name__ == "__main__":
     parser = ArgumentParser()
 
@@ -46,7 +47,7 @@ if __name__ == "__main__":
         "--group-by",
         type=str,
         choices=["id", "id+target"],
-        default="id",
+        default="id+target",  # default to finer grouping for multi-agent settings
         help="How to group trajectories when computing expectations.",
     )
 
@@ -106,101 +107,113 @@ if __name__ == "__main__":
         elif args.group_by == "id+target":
             return (dp["id"], dp["target_agent"].strip())
 
-    # NEW: keep both means and the raw values + per-sample rows
-    from itertools import count
+    # collect per-sample values for each group
+    ref_vals = defaultdict(list)
+    int_vals = defaultdict(list)
 
-    def compute_group_stats(data, label):
-        """
-        label: 'ref' or 'int'
-        returns:
-          means: dict[key] -> mean Y
-          values: dict[key] -> list of Y
-          rows: list[dict]  per-sample for CSV/debug
-        """
-        grouped = defaultdict(list)
-        rows = []
-        # simple counter so you can distinguish multiple runs for same id
-        idx_counter = defaultdict(count)
+    ref_rows = []
+    int_rows = []
 
-        for dp in data:
-            key = make_key(dp)
-            y = float(bool(eval_fn(dp)))  # 1 if harmful action happened, else 0
-            grouped[key].append(y)
+    # reference runs
+    for idx, dp in enumerate(ref_data):
+        key = make_key(dp)
+        y = float(bool(eval_fn(dp)))
+        ref_vals[key].append(y)
 
-            run_idx = next(idx_counter[key])
-            rows.append(
-                {
-                    "group_key": key if not isinstance(key, tuple) else str(key),
-                    "id": dp["id"],
-                    "target_agent": dp.get("target_agent"),
-                    "adversarial_agent": dp.get("adversarial_agent"),
-                    "target_action": dp.get("target_action"),
-                    "keywords": dp.get("keywords"),
-                    "run_type": label,          # 'ref' or 'int'
-                    "run_idx_in_group": run_idx,
-                    "Y": y,
-                }
-            )
+        ref_rows.append(
+            {
+                "which": "ref",
+                "key": key,
+                "sample_idx": idx,
+                "Y": y,
+                "id": dp.get("id", None),
+                "target_agent": dp.get("target_agent", None),
+                "run_idx": dp.get("run_idx", None),
+            }
+        )
 
-        means = {k: float(np.mean(v)) for k, v in grouped.items()}
-        return means, grouped, rows
+    # intervention (corrupted) runs
+    for idx, dp in enumerate(int_data):
+        key = make_key(dp)
+        y = float(bool(eval_fn(dp)))
+        int_vals[key].append(y)
 
-    ref_mean, ref_vals, ref_rows = compute_group_stats(ref_data, label="ref")
-    int_mean, int_vals, int_rows = compute_group_stats(int_data, label="int")
+        int_rows.append(
+            {
+                "which": "int",
+                "key": key,
+                "sample_idx": idx,
+                "Y": y,
+                "id": dp.get("id", None),
+                "target_agent": dp.get("target_agent", None),
+                "run_idx": dp.get("run_idx", None),
+            }
+        )
 
-    # align keys and compute ASE^N = E_int[Y] - E_ref[Y]
-    keys = sorted(set(ref_mean.keys()) & set(int_mean.keys()))
-    per_key_ase = {k: int_mean[k] - ref_mean[k] for k in keys}
+    # intersect keys present in both ref and int
+    keys_ref = set(ref_vals.keys())
+    keys_int = set(int_vals.keys())
+    common_keys = sorted(list(keys_ref & keys_int), key=str)
 
-    # quick console check: is there at least one key where outputs differ?
-    differing_keys = []
-    for k in keys:
-        # compare means first (most important)
-        if ref_mean[k] != int_mean[k]:
-            differing_keys.append(k)
-            continue
-        # optional: also compare raw lists (in case counts differ)
-        if ref_vals[k] != int_vals[k]:
-            differing_keys.append(k)
+    if not common_keys:
+        print("No overlapping groups between reference and intervention runs (keys differ).")
+        exit(0)
 
-    if differing_keys:
-        print("Found keys where ref/int outputs differ.")
-        # print a few examples
-        for k in differing_keys[:5]:
-            print("Key:", k)
-            print("  ref values:", ref_vals[k])
-            print("  int values:", int_vals[k])
-    else:
+    # compute per-group means
+    ref_mean = {k: float(np.mean(v)) for k, v in ref_vals.items()}
+    int_mean = {k: float(np.mean(v)) for k, v in int_vals.items()}
+
+    # per-group ASE and overall ASE
+    group_rows = []
+    ase_values = []
+    any_difference = False
+
+    for k in common_keys:
+        r = ref_mean.get(k, np.nan)
+        t = int_mean.get(k, np.nan)
+        ase = t - r
+        ase_values.append(ase)
+
+        # detect if there is any difference (for your debugging message)
+        if not np.isclose(r, t):
+            any_difference = True
+
+        if isinstance(k, tuple) and len(k) == 2:
+            kid, tgt = k
+        else:
+            kid, tgt = k, None
+
+        group_rows.append(
+            {
+                "key": k,
+                "id": kid,
+                "target_agent": tgt,
+                "ref_mean_Y": r,
+                "int_mean_Y": t,
+                "ase": ase,
+                "n_ref_samples": len(ref_vals[k]),
+                "n_int_samples": len(int_vals[k]),
+            }
+        )
+
+    ase_values = np.array(ase_values)
+    est_ase = float(np.mean(ase_values))
+
+    # print debug info about differences
+    if not any_difference:
         print("No differences found between ref + int Y values (at this granularity).")
+    else:
+        print("At least one group has different ref vs int expectations.")
 
-    # overall ASE (averaged over all harmful behaviors)
-    overall_ase = np.mean(list(per_key_ase.values()))
-    print(f"Estimated ASE (averaged over groups): {overall_ase:.4f}")
+    print(f"Estimated ASE (averaged over groups): {est_ase:.4f}")
 
-    # optional: dump per-id ASE and per-sample Y's to CSV for later analysis
+    # save CSVs if requested
     if args.res_path:
-        # group-level summary
-        group_rows = []
-        for k in keys:
-            if isinstance(k, tuple):
-                id_, target_agent = k
-            else:
-                id_, target_agent = k, None
-            group_rows.append(
-                {
-                    "id": id_,
-                    "target_agent": target_agent,
-                    "E_Y_ref": ref_mean[k],
-                    "E_Y_int": int_mean[k],
-                    "ASE": per_key_ase[k],
-                }
-            )
         df_groups = pd.DataFrame(group_rows)
         df_groups.to_csv(args.res_path, index=False)
         print(f"Saved per-group ASE to {args.res_path}")
 
-        # NEW: per-sample values file
-        sample_path = args.res_path.replace(".csv", "_samples.csv")
         df_samples = pd.DataFrame(ref_rows + int_rows)
-        df_samples.to_csv(sample_path, index=False)
-        print(f"Saved per-sample Y values to {sample_path}")
+        samples_path = args.res_path.replace(".csv", "_samples.csv")
+        df_samples.to_csv(samples_path, index=False)
+        print(f"Saved per-sample Y values to {samples_path}")
