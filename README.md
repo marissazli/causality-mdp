@@ -43,6 +43,39 @@ These arguments allow for flexible, targeted evaluation of robustness in agentic
 ```bash
 python run_experiments.py --model-client llama3.1:70b --environment travel_planning --adversarial-agent PLANNER_AGENT
 ```
+```bash
+SESSION=travel_llama8b
+GPU=0
+
+tmux new -d -s "$SESSION" \; \
+  setenv -t "$SESSION" CUDA_VISIBLE_DEVICES "$GPU" \; \
+  \
+  rename-window -t "$SESSION":0 'serve' \; \
+  send-keys   -t "$SESSION":serve \
+    'cd ~/causality-mdp && source .venv/bin/activate && ollama serve' C-m \; \
+  \
+  new-window  -t "$SESSION" -n 'safe' \; \
+  send-keys   -t "$SESSION":safe \
+    'cd ~/causality-mdp && source .venv/bin/activate && \
+     until curl -sf localhost:11434/api/version >/dev/null; do sleep 1; done; \
+     bash scripts/llama-3.1_8b/run_travel_planner_experiments.sh \
+       --n-runs 5 \
+       --safe \
+       --id safe' C-m \; \
+  \
+  new-window  -t "$SESSION" -n 'corrupted' \; \
+  send-keys   -t "$SESSION":corrupted \
+    'cd ~/causality-mdp && source .venv/bin/activate && \
+     until curl -sf localhost:11434/api/version >/dev/null; do sleep 1; done; \
+     bash scripts/llama-3.1_8b/run_travel_planner_experiments.sh \
+       --n-runs 5 \
+       --id corrupted' C-m \; \
+  \
+  new-window  -t "$SESSION" -n 'monitor' \; \
+  send-keys   -t "$SESSION":monitor 'watch -n 1 nvidia-smi' C-m \; \
+  \
+  attach      -t "$SESSION"
+```
 
 ## Running Full-Scale Experiments
 
