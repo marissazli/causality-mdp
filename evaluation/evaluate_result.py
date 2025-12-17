@@ -30,7 +30,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--res-path", type=str)
 
-    # ---- new args for ASE ----
+    # ---- args for ASE / counterfactual mode ----
     parser.add_argument(
         "--ref-paths",
         type=str,
@@ -47,8 +47,18 @@ if __name__ == "__main__":
         "--group-by",
         type=str,
         choices=["id", "id+target"],
-        default="id+target",  # default to finer grouping for multi-agent settings
-        help="How to group trajectories when computing expectations.",
+        default="id+target",
+        help="How to group trajectories when computing expectations (ASE mode).",
+    )
+    # NEW: strict pairwise, seed-matched mode
+    parser.add_argument(
+        "--pairwise",
+        action="store_true",
+        help=(
+            "If set, compute counterfactual effects by pairing ref & int samples "
+            "with the same (id, run_idx) and averaging Y_int - Y_ref. "
+            "Overrides --group-by."
+        ),
     )
 
     args = parser.parse_args()
@@ -84,7 +94,7 @@ if __name__ == "__main__":
         exit(0)
 
     # -------------------------------------
-    #  MODE 2: ASE between ref & int runs
+    #  MODE 2: ASE / counterfactual between ref & int runs
     # -------------------------------------
 
     if args.ref_paths is None or args.int_paths is None:
@@ -100,7 +110,111 @@ if __name__ == "__main__":
     ref_data = load_many(args.ref_paths)
     int_data = load_many(args.int_paths)
 
-    # helper: key used to group trajectories that share the same harmful action
+    # ---------------------------------------------------------
+    # 2A. PAIRWISE MODE: (id, run_idx) matched counterfactuals
+    # ---------------------------------------------------------
+    if args.pairwise:
+        # Build lookup dicts keyed by (id, run_idx)
+        def key_pair(dp):
+            return (dp["id"], dp.get("run_idx", None))
+
+        ref_dict = {}
+        for dp in ref_data:
+            k = key_pair(dp)
+            if k in ref_dict:
+                # you can warn if there are duplicates, but we just keep the first
+                pass
+            ref_dict[k] = dp
+
+        int_dict = {}
+        for dp in int_data:
+            k = key_pair(dp)
+            if k in int_dict:
+                pass
+            int_dict[k] = dp
+
+        common_keys = sorted(set(ref_dict.keys()) & set(int_dict.keys()), key=str)
+
+        if not common_keys:
+            print("No overlapping (id, run_idx) keys between reference and intervention runs.")
+            exit(0)
+
+        pair_rows = []
+        deltas = []
+
+        for k in common_keys:
+            dp_ref = ref_dict[k]
+            dp_int = int_dict[k]
+
+            y_ref = float(bool(eval_fn(dp_ref)))
+            y_int = float(bool(eval_fn(dp_int)))
+            delta = y_int - y_ref
+
+            deltas.append(delta)
+
+            i, run_idx = k
+            pair_rows.append(
+                {
+                    "id": i,
+                    "run_idx": run_idx,
+                    "seed_ref": dp_ref.get("seed", None),
+                    "seed_int": dp_int.get("seed", None),
+                    "target_agent_ref": dp_ref.get("target_agent", None),
+                    "target_agent_int": dp_int.get("target_agent", None),
+                    "Y_ref": y_ref,
+                    "Y_int": y_int,
+                    "delta": delta,
+                }
+            )
+
+        deltas = np.array(deltas)
+        est_effect = float(np.mean(deltas))
+
+        print(f"Pairwise counterfactual effect (mean Y_int - Y_ref over pairs): {est_effect:.4f}")
+        print(f"Number of matched pairs: {len(pair_rows)}")
+
+        if args.res_path:
+            df_pairs = pd.DataFrame(pair_rows)
+            df_pairs.to_csv(args.res_path, index=False)
+            print(f"Saved per-pair counterfactual effects to {args.res_path}")
+
+        # also save raw per-sample Y if you want
+        samples_path = (args.res_path or "counterfactual_pairs.csv").replace(".csv", "_samples.csv")
+        all_samples = []
+        for k in common_keys:
+            dp_ref = ref_dict[k]
+            dp_int = int_dict[k]
+            y_ref = float(bool(eval_fn(dp_ref)))
+            y_int = float(bool(eval_fn(dp_int)))
+            all_samples.append(
+                {
+                    "which": "ref",
+                    "id": dp_ref.get("id", None),
+                    "run_idx": dp_ref.get("run_idx", None),
+                    "seed": dp_ref.get("seed", None),
+                    "target_agent": dp_ref.get("target_agent", None),
+                    "Y": y_ref,
+                }
+            )
+            all_samples.append(
+                {
+                    "which": "int",
+                    "id": dp_int.get("id", None),
+                    "run_idx": dp_int.get("run_idx", None),
+                    "seed": dp_int.get("seed", None),
+                    "target_agent": dp_int.get("target_agent", None),
+                    "Y": y_int,
+                }
+            )
+        df_samples = pd.DataFrame(all_samples)
+        df_samples.to_csv(samples_path, index=False)
+        print(f"Saved per-sample Y values to {samples_path}")
+
+        exit(0)
+
+    # ---------------------------------------------------------
+    # 2B. ORIGINAL ASE MODE: group-by id or id+target (unchanged)
+    # ---------------------------------------------------------
     def make_key(dp):
         if args.group_by == "id":
             return dp["id"]
@@ -174,7 +288,6 @@ if __name__ == "__main__":
         ase = t - r
         ase_values.append(ase)
 
-        # detect if there is any difference (for your debugging message)
         if not np.isclose(r, t):
             any_difference = True
 
@@ -199,7 +312,6 @@ if __name__ == "__main__":
     ase_values = np.array(ase_values)
     est_ase = float(np.mean(ase_values))
 
-    # print debug info about differences
     if not any_difference:
         print("No differences found between ref + int Y values (at this granularity).")
     else:

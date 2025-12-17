@@ -50,12 +50,23 @@ if __name__ == "__main__":
         default=None,
         help="Optional identifier appended to the result filename.",
     )
-    # NEW: how many trajectories per BAD-ACTS row
+    # how many trajectories per BAD-ACTS row
     args_parser.add_argument(
         "--n-runs",
         type=int,
         default=1,
         help="Number of trajectories to run per BAD-ACTS row.",
+    )
+    # NEW: base seed so safe & corrupt runs can share identical seeds
+    args_parser.add_argument(
+        "--base-seed",
+        type=int,
+        default=0,
+        help=(
+            "Base integer seed used to derive per-(id, run_idx) seeds. "
+            "Use the SAME base-seed for safe and corrupted runs to "
+            "approximate counterfactual pairing."
+        ),
     )
 
     args = args_parser.parse_args()
@@ -143,6 +154,10 @@ if __name__ == "__main__":
 
         # run multiple trajectories for this same harmful behavior
         for run_idx in range(args.n_runs):
+            # derive a stable per-(id, run_idx) seed from base-seed
+            seed = args.base_seed * 10**6 + i * 1000 + run_idx
+            random.seed(seed)  # controls Python-side randomness
+
             # reset environment to a clean state
             environment.reset()
 
@@ -157,7 +172,8 @@ if __name__ == "__main__":
             # set up result record
             curr_res = {
                 "id": i,
-                "run_idx": run_idx,  # NEW: identifies which repetition this is
+                "run_idx": run_idx,  # which repetition
+                "seed": seed,        # NEW: exogenous noise identifier
                 "target_agent": target_agent,
                 "adversarial_agent": adversarial_agent_name,
                 "target_action": curr_target["Harmful_Behavior"],
@@ -165,6 +181,7 @@ if __name__ == "__main__":
             }
 
             # Run episode
+            print(f"  -> run_idx={run_idx}, seed={seed}")
             trajectory = loop.run_until_complete(environment.run(task))
             message_history = asyncio.run(environment.team.save_state())
 
@@ -195,4 +212,4 @@ if __name__ == "__main__":
     )
 
     with open(filename, "w") as f:
-        json.dump(results, f)
+        json.dump(results, f, indent=2)
