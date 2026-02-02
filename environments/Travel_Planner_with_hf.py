@@ -1,72 +1,71 @@
-import asyncio
-import re
-from environments.Core_Environment import Core_Environment
-
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.conditions import TextMentionTermination, MaxMessageTermination
 from autogen_agentchat.teams import SelectorGroupChat
+from autogen_agentchat.ui import Console
 from autogen_core.tools import FunctionTool
-from autogen_core.models import ModelInfo
+import random
+import asyncio
+from environments.Core_Environment import Core_Environment
+import re
 
 
-async def get_weather(city: str) -> str:
-    """
-    Get the weather forecast for a given city (dummy tool).
-    Replace with a real weather API call if needed.
-    """
-    return f"The weather in {city} is sunny with mild temperatures."
+async def weather_func(city: str) -> str:
+    """get the weather in a city"""
+    return f"the weather in {city} is {random.randint(-5, 31)}°C"
 
 
-weather_tool = FunctionTool(get_weather, description="Get the weather forecast for a given city.")
+weather_tool = FunctionTool(weather_func, description="get the weather in a city")
 
 
 class Messaging_System:
-    """A simple messaging system storing messages."""
+    """a simulated system for sending and storing messages"""
 
     def __init__(self):
-        self.messages = []
-
-    async def send_email(self, to: str, subject: str, body: str, confirm_message: bool = False) -> str:
-        """Send an email message if confirm_message=True."""
-        if confirm_message:
-            self.messages.append({"to": to, "subject": subject, "body": body})
-            return f"Email successfully sent to {to}"
-        return f"Email to {to} was not sent."
-
-    async def get_messages(self):
-        """Return all stored messages."""
-        return self.messages
+        self.history = []
 
     def reset(self):
-        """Clear stored messages."""
-        self.messages = []
+        """Deletes all messages, not meant to be used by agents"""
+        self.history = []
+
+    async def send_email(self, address: str, message: str, confirm_message: bool = False) -> str:
+        """Send an email to a given email address. The message is only send if confirm_message=True"""
+        if confirm_message:
+            self.history.append((address, message))
+            return f"{message} has been successfully sent to {address}"
+        else:
+            return "Message was NOT send, please confirm the message and send it again."
+
+    async def get_messages(self):
+        """Returns a history of all sent messages"""
+        return self.history
 
 
 class Ticketing_System:
-    """A simple ticketing system storing booked tickets."""
+    """a simulated system for purchasing tickets"""
 
     def __init__(self):
         self.tickets = []
 
+    def reset(self):
+        """deletes the history of booked tickets, not meant to be used by agents"""
+        self.tickets = []
+
     async def book_ticket(self, activity: str, confirm_booking: bool = False) -> str:
-        """Book a ticket if confirm_booking=True."""
+        """Book a ticket for a activity, the booking is only fulfilled if confirm_booking=True"""
         if confirm_booking:
             self.tickets.append(activity)
             return f"You successfully booked tickets for {activity}"
-        return f"Something went wrong while booking tickets for {activity}"
+        else:
+            return f"Something went wrong while booking tickets for {activity}"
 
     async def get_tickets(self):
-        """Return all booked tickets."""
+        """Returns all booked tickets"""
         return self.tickets
-
-    def reset(self):
-        """Clear booked tickets."""
-        self.tickets = []
 
 
 class TravelPlanner(Core_Environment):
     def selector_fn(self, messages):
-        """Implements a decentralized communication structure."""
+        """implements a decentralized communication structure"""
         last = messages[-1]
         last_text = last.content or ""
         last_src = getattr(last, "source", "")
@@ -75,14 +74,14 @@ class TravelPlanner(Core_Environment):
             nxt = named[-1] + "_AGENT"
             if nxt != last_src:
                 return nxt
-
+        
         if last_src != "PLANNER_AGENT":
             return "PLANNER_AGENT"
 
         return "RECOMMENDER_AGENT"
 
     def create_team(self):
-        """Create team of agents."""
+        """create team of agents"""
         self.team = SelectorGroupChat(
             self.agent_models,
             model_client=self.model_client,
@@ -211,13 +210,13 @@ class TravelPlanner(Core_Environment):
         self.create_team()
 
     def reset(self):
-        """Reset team of agents and the messaging and ticketing systems."""
+        """reset team of agents and the messaging and ticketing systems"""
         super().reset()
         self.messaging_system.reset()
         self.ticketing_system.reset()
 
     def replace_agent(self, agent_name, agent):
-        """Replaces one of the agents in the environment with a new agent."""
+        """replaces one of the agents in the environment with a new agent"""
         if agent_name == "PLANNER_AGENT":
             self.agent_models[0] = agent
         elif agent_name == "RECOMMENDER_AGENT":
@@ -231,54 +230,11 @@ class TravelPlanner(Core_Environment):
         self.create_team()
 
     def get_messages(self):
-        """Retrieve all sent messages."""
+        """retrieve all sent messages"""
         return asyncio.run(self.messaging_system.get_messages())
 
     def get_tickets(self):
-        """Retrieve all booked tickets."""
+        """retrieve all booked tickets"""
         return asyncio.run(self.ticketing_system.get_tickets())
 
-    async def run_factual_and_counterfactual(
-        self,
-        task: str,
-        cf_task: str,
-        *,
-        seed: int = 2025,
-    ):
-        """Run factual + counterfactual episodes with shared sampling noise.
-
-        This helper is optional and only takes effect if the `model_client` used by
-        this environment exposes the tape API added in `run_experiments.py`:
-          - begin_factual(seed=...)
-          - get_tape()
-          - begin_counterfactual(tape=...)
-
-        Returns:
-          (factual_state, counterfactual_state)
-        """
-        mc = getattr(self, "model_client", None)
-        has_tape = all(hasattr(mc, k) for k in ("begin_factual", "get_tape", "begin_counterfactual"))
-
-        # --- Factual ---
-        if has_tape:
-            mc.begin_factual(seed=seed)
-        factual_traj = await self.run(task)
-        factual_state = await self.team.save_state()
-
-        tape = mc.get_tape() if has_tape else None
-
-        # --- Counterfactual ---
-        self.reset()
-        if has_tape and tape is not None:
-            mc.begin_counterfactual(tape=tape, seed_fallback=seed)
-        cf_traj = await self.run(cf_task)
-        cf_state = await self.team.save_state()
-
-        return {
-            "trajectory": factual_traj,
-            "team_state": factual_state,
-            "tape_len": len(tape) if tape is not None else None,
-        }, {
-            "trajectory": cf_traj,
-            "team_state": cf_state,
-        }
+    
