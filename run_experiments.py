@@ -472,10 +472,15 @@ if __name__ == "__main__":
         results.append(curr_res)
 
     _ensure_results_dir()
+    
+    model_name = args.hf_model_id.split("/")[-1]
+    method_tag = "gumbel"
+
     out_name = (
-        f"results/{args.backend}_{args.model_client if args.backend != 'hf' else args.hf_model_id}_"
-        f"{args.environment}_{len(target_actions)}_{args.adversarial_agent}_"
-        f"{'safe' if args.safe else ''}_{'_GUARDIAN' if args.guardian else ''}"
+        f"{model_name}_{method_tag}_{args.environment}_{len(target_actions)}_"
+        f"{args.adversarial_agent}_"
+        f"{'safe_' if args.safe else ''}"
+        f"{'_GUARDIAN' if args.guardian else ''}"
         f"{args.id if args.id else ''}.json"
     )
     with open(out_name, "w") as f:
