@@ -1,5 +1,22 @@
+"""
+evaluate_result.py
+
+Walks a results directory produced by run_experiments.py (--compact-cf layout)
+and computes:
+  - Y_factual   : eval_fn on factual.json for each row
+  - Y_cf        : eval_fn on each call_NNN_sample_MMM_full.json
+  - causal_effect = Y_cf - Y_factual   (per row x call_idx)
+  - ASE         : mean causal effect across all (row, call_idx) pairs
+
+Usage:
+    python evaluate_result.py \
+        --results-dir results/env=travel_planning/model=Qwen3-8B/adv=PLANNER_AGENT \
+        --environment travel_planning \
+        [--res-path output.csv]
+"""
+
 from argparse import ArgumentParser
-from collections import defaultdict
+from pathlib import Path
 import json
 import numpy as np
 import pandas as pd
@@ -12,58 +29,71 @@ from evaluation_functions import (
 )
 
 
+def load_json(path: Path) -> dict:
+    with open(path) as f:
+        return json.load(f)
+
+
+def make_eval_datapoint(factual: dict, cf_full: dict) -> dict:
+    """
+    Merge factual metadata (target_agent, keywords, id, adversarial_agent, etc.)
+    into the CF full datapoint so eval functions have everything they need.
+    CF run data (team_states, sent_messages, tickets, files, trajectory) takes
+    precedence since that's what we're evaluating.
+    """
+    merged = {}
+    # start with factual metadata fields
+    for key in ("id", "target_agent", "adversarial_agent", "target_action",
+                "keywords", "backend", "environment", "task", "seed", "safe", "guardian"):
+        if key in factual:
+            merged[key] = factual[key]
+    # overlay CF run output fields (these override if present)
+    for key in ("team_states", "sent_messages", "tickets", "files",
+                "trajectory", "call_log", "tape_status"):
+        if key in cf_full:
+            merged[key] = cf_full[key]
+        elif key in factual.get("factual", {}):
+            # factual.json nests run data under "factual" key
+            merged[key] = factual["factual"][key]
+    return merged
+
+
+def make_factual_datapoint(factual: dict) -> dict:
+    """Flatten factual.json so eval functions can access fields directly."""
+    merged = {}
+    for key in ("id", "target_agent", "adversarial_agent", "target_action",
+                "keywords", "backend", "environment", "task", "seed", "safe", "guardian"):
+        if key in factual:
+            merged[key] = factual[key]
+    factual_run = factual.get("factual", {})
+    for key in ("team_states", "sent_messages", "tickets", "files", "trajectory"):
+        if key in factual_run:
+            merged[key] = factual_run[key]
+    return merged
+
+
 if __name__ == "__main__":
     parser = ArgumentParser()
-
-    # ---- existing args ----
-    # For backward compatibility, keep a simple "single file" mode
     parser.add_argument(
-        "path",
+        "--results-dir",
         type=str,
-        nargs="?",
-        help="Path to a single results JSON file (legacy ASR mode).",
+        required=True,
+        help="Root results dir to walk, e.g. results/env=travel_planning/model=Qwen3-8B/adv=PLANNER_AGENT",
     )
     parser.add_argument(
-        "environment",
+        "--environment",
         type=str,
+        required=True,
         choices=["travel_planning", "financial_article_writing", "code_generation", "multi_agent_debate"],
     )
-    parser.add_argument("--res-path", type=str)
-
-    # ---- args for ASE / counterfactual mode ----
     parser.add_argument(
-        "--ref-paths",
+        "--res-path",
         type=str,
-        nargs="+",
-        help="One or more JSON files from the REFERENCE system (no intervention).",
+        default=None,
+        help="Optional path to save per-(row, call_idx) CSV.",
     )
-    parser.add_argument(
-        "--int-paths",
-        type=str,
-        nargs="+",
-        help="One or more JSON files from the INTERVENTION system (do(A_i,t = a_i,t)).",
-    )
-    parser.add_argument(
-        "--group-by",
-        type=str,
-        choices=["id", "id+target"],
-        default="id+target",
-        help="How to group trajectories when computing expectations (ASE mode).",
-    )
-    # NEW: strict pairwise, seed-matched mode
-    parser.add_argument(
-        "--pairwise",
-        action="store_true",
-        help=(
-            "If set, compute counterfactual effects by pairing ref & int samples "
-            "with the same (id, run_idx) and averaging Y_int - Y_ref. "
-            "Overrides --group-by."
-        ),
-    )
-
     args = parser.parse_args()
 
-    # select correct evaluation function
     eval_fn = {
         "travel_planning": evaluate_travel_planning,
         "financial_article_writing": evaluate_financial_article_writing,
@@ -71,261 +101,112 @@ if __name__ == "__main__":
         "multi_agent_debate": evaluate_MAD,
     }[args.environment]
 
-    # -------------------------------
-    #  MODE 1: legacy ASR on one file
-    # -------------------------------
-    if args.ref_paths is None and args.int_paths is None:
-        if args.path is None:
-            raise ValueError("Either provide `path` (legacy mode) or `--ref-paths/--int-paths` (ASE mode).")
+    results_root = Path(args.results_dir)
+    row_dirs = sorted(results_root.glob("row=*"))
 
-        with open(args.path) as f:
-            data = json.load(f)
+    if not row_dirs:
+        raise FileNotFoundError(f"No row=* directories found under {results_root}")
 
-        success = [bool(eval_fn(dp)) for dp in data]
-        asr = sum(success) / len(success)
-        print(f"Attack Success Rate: {asr:.4f}")
+    rows = []
+    factual_ys = []
 
-        if args.res_path:
-            results = pd.read_csv("datasets/BAD-ACTS.csv")
-            results = results[results["Environment"] == args.environment]
-            results["Success"] = success
-            results.to_csv(args.res_path, index=False)
+    for row_dir in row_dirs:
+        factual_path = row_dir / "factual.json"
+        if not factual_path.exists():
+            print(f"  [skip] no factual.json in {row_dir}")
+            continue
 
-        exit(0)
+        factual = load_json(factual_path)
+        row_id = factual.get("id", row_dir.name)
 
-    # -------------------------------------
-    #  MODE 2: ASE / counterfactual between ref & int runs
-    # -------------------------------------
+        factual_dp = make_factual_datapoint(factual)
+        try:
+            y_factual = float(bool(eval_fn(factual_dp)))
+        except Exception as e:
+            print(f"  [warn] eval failed on factual for row {row_id}: {e}")
+            y_factual = float("nan")
 
-    if args.ref_paths is None or args.int_paths is None:
-        raise ValueError("In ASE mode you must provide BOTH --ref-paths and --int-paths.")
+        factual_ys.append(y_factual)
 
-    def load_many(paths):
-        all_dp = []
-        for p in paths:
-            with open(p) as f:
-                all_dp.extend(json.load(f))
-        return all_dp
+        cf_dir = row_dir / "cf"
+        if not cf_dir.exists():
+            print(f"  [skip] no cf/ dir in {row_dir}")
+            continue
 
-    ref_data = load_many(args.ref_paths)
-    int_data = load_many(args.int_paths)
+        cf_full_files = sorted(cf_dir.glob("call_*_sample_*_full.json"))
+        if not cf_full_files:
+            print(f"  [skip] no call_*_sample_*_full.json in {cf_dir}")
+            continue
 
-    # ---------------------------------------------------------
-    # 2A. PAIRWISE MODE: (id, run_idx) matched counterfactuals
-    # ---------------------------------------------------------
-    if args.pairwise:
-        # Build lookup dicts keyed by (id, run_idx)
-        def key_pair(dp):
-            return (dp["id"], dp.get("run_idx", None))
+        for cf_path in cf_full_files:
+            # parse call_idx and sample_idx from filename: call_003_sample_000_full.json
+            stem = cf_path.stem.replace("_full", "")
+            parts = stem.split("_")
+            try:
+                call_idx = int(parts[1])
+                sample_idx = int(parts[3])
+            except (IndexError, ValueError):
+                print(f"  [warn] unexpected filename format: {cf_path.name}")
+                continue
 
-        ref_dict = {}
-        for dp in ref_data:
-            k = key_pair(dp)
-            if k in ref_dict:
-                # you can warn if there are duplicates, but we just keep the first
-                pass
-            ref_dict[k] = dp
+            cf_full = load_json(cf_path)
+            cf_dp = make_eval_datapoint(factual, cf_full)
 
-        int_dict = {}
-        for dp in int_data:
-            k = key_pair(dp)
-            if k in int_dict:
-                pass
-            int_dict[k] = dp
+            try:
+                y_cf = float(bool(eval_fn(cf_dp)))
+            except Exception as e:
+                print(f"  [warn] eval failed on {cf_path.name} for row {row_id}: {e}")
+                y_cf = float("nan")
 
-        common_keys = sorted(set(ref_dict.keys()) & set(int_dict.keys()), key=str)
+            causal_effect = y_cf - y_factual
 
-        if not common_keys:
-            print("No overlapping (id, run_idx) keys between reference and intervention runs.")
-            exit(0)
+            rows.append({
+                "row_id": row_id,
+                "call_idx": call_idx,
+                "sample_idx": sample_idx,
+                "y_factual": y_factual,
+                "y_cf": y_cf,
+                "causal_effect": causal_effect,
+                "target_agent": factual.get("target_agent", None),
+                "cf_agent": cf_full.get("intervention", {}).get("cf_agent", None),
+                "cf_path": str(cf_path),
+            })
 
-        pair_rows = []
-        deltas = []
+    if not rows:
+        print("No CF results found to evaluate.")
+        raise SystemExit(1)
 
-        for k in common_keys:
-            dp_ref = ref_dict[k]
-            dp_int = int_dict[k]
+    df = pd.DataFrame(rows)
 
-            y_ref = float(bool(eval_fn(dp_ref)))
-            y_int = float(bool(eval_fn(dp_int)))
-            delta = y_int - y_ref
-
-            deltas.append(delta)
-
-            i, run_idx = k
-            pair_rows.append(
-                {
-                    "id": i,
-                    "run_idx": run_idx,
-                    "seed_ref": dp_ref.get("seed", None),
-                    "seed_int": dp_int.get("seed", None),
-                    "target_agent_ref": dp_ref.get("target_agent", None),
-                    "target_agent_int": dp_int.get("target_agent", None),
-                    "Y_ref": y_ref,
-                    "Y_int": y_int,
-                    "delta": delta,
-                }
-            )
-
-        deltas = np.array(deltas)
-        est_effect = float(np.mean(deltas))
-
-        print(f"Pairwise counterfactual effect (mean Y_int - Y_ref over pairs): {est_effect:.4f}")
-        print(f"Number of matched pairs: {len(pair_rows)}")
-
-        if args.res_path:
-            df_pairs = pd.DataFrame(pair_rows)
-            df_pairs.to_csv(args.res_path, index=False)
-            print(f"Saved per-pair counterfactual effects to {args.res_path}")
-
-        # also save raw per-sample Y if you want
-        samples_path = (args.res_path or "counterfactual_pairs.csv").replace(".csv", "_samples.csv")
-        all_samples = []
-        for k in common_keys:
-            dp_ref = ref_dict[k]
-            dp_int = int_dict[k]
-            y_ref = float(bool(eval_fn(dp_ref)))
-            y_int = float(bool(eval_fn(dp_int)))
-            all_samples.append(
-                {
-                    "which": "ref",
-                    "id": dp_ref.get("id", None),
-                    "run_idx": dp_ref.get("run_idx", None),
-                    "seed": dp_ref.get("seed", None),
-                    "target_agent": dp_ref.get("target_agent", None),
-                    "Y": y_ref,
-                }
-            )
-            all_samples.append(
-                {
-                    "which": "int",
-                    "id": dp_int.get("id", None),
-                    "run_idx": dp_int.get("run_idx", None),
-                    "seed": dp_int.get("seed", None),
-                    "target_agent": dp_int.get("target_agent", None),
-                    "Y": y_int,
-                }
-            )
-        df_samples = pd.DataFrame(all_samples)
-        df_samples.to_csv(samples_path, index=False)
-        print(f"Saved per-sample Y values to {samples_path}")
-
-        exit(0)
-
-    # ---------------------------------------------------------
-    # 2B. ORIGINAL ASE MODE: group-by id or id+target (unchanged)
-    # ---------------------------------------------------------
-    def make_key(dp):
-        if args.group_by == "id":
-            return dp["id"]
-        elif args.group_by == "id+target":
-            return (dp["id"], dp["target_agent"].strip())
-
-    # collect per-sample values for each group
-    ref_vals = defaultdict(list)
-    int_vals = defaultdict(list)
-
-    ref_rows = []
-    int_rows = []
-
-    # reference runs
-    for idx, dp in enumerate(ref_data):
-        key = make_key(dp)
-        y = float(bool(eval_fn(dp)))
-        ref_vals[key].append(y)
-
-        ref_rows.append(
-            {
-                "which": "ref",
-                "key": key,
-                "sample_idx": idx,
-                "Y": y,
-                "id": dp.get("id", None),
-                "target_agent": dp.get("target_agent", None),
-                "run_idx": dp.get("run_idx", None),
-            }
+    # --- per (row_id, call_idx) summary (averaged over samples) ---
+    grouped = (
+        df.groupby(["row_id", "call_idx"])
+        .agg(
+            y_factual=("y_factual", "first"),
+            y_cf_mean=("y_cf", "mean"),
+            causal_effect_mean=("causal_effect", "mean"),
+            n_samples=("sample_idx", "count"),
+            target_agent=("target_agent", "first"),
+            cf_agent=("cf_agent", "first"),
         )
+        .reset_index()
+    )
 
-    # intervention (corrupted) runs
-    for idx, dp in enumerate(int_data):
-        key = make_key(dp)
-        y = float(bool(eval_fn(dp)))
-        int_vals[key].append(y)
+    # --- aggregate ASE ---
+    valid = grouped["causal_effect_mean"].dropna()
+    ase = float(np.mean(valid))
+    asr_factual = float(np.nanmean(df.groupby("row_id")["y_factual"].first()))
 
-        int_rows.append(
-            {
-                "which": "int",
-                "key": key,
-                "sample_idx": idx,
-                "Y": y,
-                "id": dp.get("id", None),
-                "target_agent": dp.get("target_agent", None),
-                "run_idx": dp.get("run_idx", None),
-            }
-        )
+    print(f"\nRows evaluated       : {df['row_id'].nunique()}")
+    print(f"ASR (factual)        : {asr_factual:.4f}")
+    print(f"(row, call_idx) pairs: {len(grouped)}")
+    print(f"Aggregate ASE        : {ase:.4f}")
+    print(f"\nPer-(row, call_idx) causal effects:")
+    print(grouped[["row_id", "call_idx", "cf_agent", "y_factual", "y_cf_mean", "causal_effect_mean", "n_samples"]].to_string(index=False))
 
-    # intersect keys present in both ref and int
-    keys_ref = set(ref_vals.keys())
-    keys_int = set(int_vals.keys())
-    common_keys = sorted(list(keys_ref & keys_int), key=str)
-
-    if not common_keys:
-        print("No overlapping groups between reference and intervention runs (keys differ).")
-        exit(0)
-
-    # compute per-group means
-    ref_mean = {k: float(np.mean(v)) for k, v in ref_vals.items()}
-    int_mean = {k: float(np.mean(v)) for k, v in int_vals.items()}
-
-    # per-group ASE and overall ASE
-    group_rows = []
-    ase_values = []
-    any_difference = False
-
-    for k in common_keys:
-        r = ref_mean.get(k, np.nan)
-        t = int_mean.get(k, np.nan)
-        ase = t - r
-        ase_values.append(ase)
-
-        if not np.isclose(r, t):
-            any_difference = True
-
-        if isinstance(k, tuple) and len(k) == 2:
-            kid, tgt = k
-        else:
-            kid, tgt = k, None
-
-        group_rows.append(
-            {
-                "key": k,
-                "id": kid,
-                "target_agent": tgt,
-                "ref_mean_Y": r,
-                "int_mean_Y": t,
-                "ase": ase,
-                "n_ref_samples": len(ref_vals[k]),
-                "n_int_samples": len(int_vals[k]),
-            }
-        )
-
-    ase_values = np.array(ase_values)
-    est_ase = float(np.mean(ase_values))
-
-    if not any_difference:
-        print("No differences found between ref + int Y values (at this granularity).")
-    else:
-        print("At least one group has different ref vs int expectations.")
-
-    print(f"Estimated ASE (averaged over groups): {est_ase:.4f}")
-
-    # save CSVs if requested
     if args.res_path:
-        df_groups = pd.DataFrame(group_rows)
-        df_groups.to_csv(args.res_path, index=False)
-        print(f"Saved per-group ASE to {args.res_path}")
-
-        df_samples = pd.DataFrame(ref_rows + int_rows)
-        samples_path = args.res_path.replace(".csv", "_samples.csv")
-        df_samples.to_csv(samples_path, index=False)
-        print(f"Saved per-sample Y values to {samples_path}")
+        grouped.to_csv(args.res_path, index=False)
+        raw_path = args.res_path.replace(".csv", "_raw.csv")
+        df.to_csv(raw_path, index=False)
+        print(f"\nSaved per-(row, call_idx) summary to {args.res_path}")
+        print(f"Saved raw per-sample rows to {raw_path}")

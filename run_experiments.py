@@ -105,6 +105,7 @@ class CallLogEntry:
     tape_start: int
     tape_end: int
     prompt_preview: str
+    response_text: str
 
 
 class HFModelClient:
@@ -190,6 +191,7 @@ class HFModelClient:
                 tape_start=int(x["tape_start"]),
                 tape_end=int(x["tape_end"]),
                 prompt_preview=str(x.get("prompt_preview", "")),
+                response_text=str(x.get("response_text", "")),
             )
             for x in factual_call_log
         ]
@@ -258,7 +260,7 @@ class HFModelClient:
         for msg in chat:
             lines.append(f"{msg['role'].upper()}: {msg['content']}")
         lines.append("ASSISTANT:")
-        return "".join(lines)
+        return "\n".join(lines)
 
     @torch.no_grad()
     def _generate_text_gumbel(self, prompt: str) -> str:
@@ -323,6 +325,7 @@ class HFModelClient:
                     tape_start=tape_start,
                     tape_end=tape_end,
                     prompt_preview=prompt_preview,
+                    response_text=self._intervene_text,
                 )
             )
             self._call_idx += 1
@@ -344,6 +347,7 @@ class HFModelClient:
                 tape_start=int(tape_start),
                 tape_end=int(tape_end),
                 prompt_preview=prompt_preview,
+                response_text=text,
             )
         )
         self._call_idx += 1
@@ -487,8 +491,14 @@ if __name__ == "__main__":
     args.add_argument("--cf-text", type=str, default=None)
     args.add_argument("--cf-call-idx", type=int, default=None)
     args.add_argument("--cf-task", type=str, default=None)
+    args.add_argument("--cf-all-calls", action="store_true")
+
     args.add_argument("--export-tape", action="store_true")
     args.add_argument("--tape-dir", type=str, default="results/tapes")
+
+    # NEW: compact output layout
+    args.add_argument("--output-root", type=str, default="results")
+    args.add_argument("--compact-cf", action="store_true")
 
     parsed = args.parse_args()
 
@@ -526,20 +536,66 @@ if __name__ == "__main__":
         )
         model_client = hf_client
 
-    os.makedirs("results", exist_ok=True)
+    os.makedirs(parsed.output_root, exist_ok=True)
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
-    results: List[Dict[str, Any]] = []
+    def _safe_model_name() -> str:
+        return parsed.hf_model_id.split("/")[-1] if parsed.backend == "hf" else parsed.model_client.replace(":", "_")
+
+    def _run_dir(curr_target, loop_idx: int) -> str:
+        row_id = int(curr_target["id"]) if "id" in curr_target else int(loop_idx)
+        p = os.path.join(
+            parsed.output_root,
+            f"env={parsed.environment}",
+            f"model={_safe_model_name()}",
+            f"adv={parsed.adversarial_agent}",
+            f"row={row_id}",
+        )
+        os.makedirs(p, exist_ok=True)
+        return p
+
+    def _write_json(path: str, obj: Any) -> None:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(obj, f)
+
+    def _compact_cf_obj(
+        *,
+        call_idx: int,
+        agent: str,
+        sample_idx: int,
+        cf_task: str,
+        intervention: Dict[str, Any],
+        tape_status: Dict[str, Any],
+        environment_obj: Any,
+    ) -> Dict[str, Any]:
+        side = _side_outputs(parsed.environment, environment_obj)
+        return {
+            "cf_call_idx": call_idx,
+            "agent": agent,
+            "sample_idx": sample_idx,
+            "cf_task": cf_task,
+            "intervention": intervention,
+            "tape_status": tape_status,
+            "sent_messages": side.get("sent_messages", []),
+            "tickets": side.get("tickets", []),
+            "files": side.get("files", []),
+        }
+
+    manifest_rows: List[Dict[str, Any]] = []
 
     for i in range(len(target_actions)):
         curr_target = target_actions.iloc[i]
         target_agent = curr_target["Target"]
         adversarial_agent_name = parsed.adversarial_agent
+
         if target_agent == adversarial_agent_name:
             continue
 
         task = _default_task(parsed.environment)
+        run_dir = _run_dir(curr_target, i)
+
         environment = _make_environment(parsed.environment, model_client, parsed.safe)
         _add_guardian_if_needed(environment, model_client, parsed.guardian)
 
@@ -572,54 +628,175 @@ if __name__ == "__main__":
             call_log = hf_client.get_call_log()
             tape_meta = {"tape_len": len(tape), "call_log": call_log}
             if parsed.export_tape:
-                model_name = parsed.hf_model_id.split("/")[-1]
-                tape_path = os.path.join(
-                    parsed.tape_dir,
-                    f"{model_name}_{parsed.environment}_{parsed.seed + i}_{adversarial_agent_name}"
-                    f"{'_safe' if parsed.safe else ''}.pt",
-                )
+                tape_path = os.path.join(run_dir, "tape.pt")
                 save_tape_pt(tape, tape_path)
                 tape_meta["tape_file"] = tape_path
 
+        # Save factual artifacts immediately per BAD-ACTS row
+        factual_fp = os.path.join(run_dir, "factual.json")
+        tape_meta_fp = os.path.join(run_dir, "tape_meta.json") if tape_meta is not None else None
+        run_index_fp = os.path.join(run_dir, "index.json")
+
+        factual_payload = {
+            "id": int(curr_target["id"]) if "id" in curr_target else int(i),
+            "target_agent": target_agent,
+            "adversarial_agent": adversarial_agent_name,
+            "target_action": curr_target["Harmful_Behavior"],
+            "keywords": curr_target["Keyword"],
+            "backend": parsed.backend,
+            "environment": parsed.environment,
+            "task": task,
+            "seed": int(parsed.seed + i),
+            "safe": bool(parsed.safe),
+            "guardian": bool(parsed.guardian),
+            "factual": factual_side,
+        }
+        _write_json(factual_fp, factual_payload)
+        if tape_meta is not None and tape_meta_fp is not None:
+            _write_json(tape_meta_fp, tape_meta)
+
         counterfactual_runs: List[Dict[str, Any]] = []
+        counterfactual_runs_by_call: List[Dict[str, Any]] = []
+        cf_index_files: List[str] = []
+
         should_run_cf = (
             not parsed.no_counterfactual
             and hf_client is not None
             and tape is not None
             and parsed.cf_samples > 0
-            and parsed.cf_text is not None
-            and (parsed.cf_agent is not None or parsed.cf_call_idx is not None)
+            and (
+                parsed.cf_all_calls
+                or (
+                    parsed.cf_text is not None
+                    and (parsed.cf_agent is not None or parsed.cf_call_idx is not None)
+                )
+            )
         )
 
         if should_run_cf:
             cf_task = parsed.cf_task if parsed.cf_task is not None else task
-            for s in range(parsed.cf_samples):
-                environment_cf = _make_environment(parsed.environment, model_client, parsed.safe)
-                _add_guardian_if_needed(environment_cf, model_client, parsed.guardian)
 
-                adversarial_agent_cf = adversarial_agent_client.create_adv_agent(
-                    curr_target["Harmful_Behavior"],
-                    adversarial_agent_name,
-                    model_client,
-                )
-                environment_cf.replace_agent(adversarial_agent_name, adversarial_agent_cf)
-                _wrap_environment_agents(environment_cf, hf_client)
+            if parsed.cf_all_calls:
+                intervention_text = parsed.cf_text if parsed.cf_text is not None else " "
+                factual_entries = call_log or []
+                cf_dir = os.path.join(run_dir, "cf")
+                os.makedirs(cf_dir, exist_ok=True)
 
-                hf_client.begin_counterfactual(
-                    tape=tape,
-                    factual_call_log=call_log or [],
-                    intervene_agent=parsed.cf_agent,
-                    intervene_text=parsed.cf_text,
-                    intervene_call_idx=parsed.cf_call_idx,
-                    choose="last",
-                    seed_fallback=parsed.seed + i + 10000 + s,
-                )
+                for entry in factual_entries:
+                    call_idx = int(entry["call_idx"])
+                    call_agent = str(entry["agent"])
+                    per_call_runs: List[Dict[str, Any]] = []
+                    compact_run_refs: List[Dict[str, Any]] = []
 
-                cf_traj = loop.run_until_complete(environment_cf.run(cf_task))
-                cf_state = loop.run_until_complete(environment_cf.team.save_state())
+                    for s in range(parsed.cf_samples):
+                        environment_cf = _make_environment(parsed.environment, model_client, parsed.safe)
+                        _add_guardian_if_needed(environment_cf, model_client, parsed.guardian)
 
-                counterfactual_runs.append(
-                    {
+                        adversarial_agent_cf = adversarial_agent_client.create_adv_agent(
+                            curr_target["Harmful_Behavior"],
+                            adversarial_agent_name,
+                            model_client,
+                        )
+                        environment_cf.replace_agent(adversarial_agent_name, adversarial_agent_cf)
+                        _wrap_environment_agents(environment_cf, hf_client)
+
+                        hf_client.begin_counterfactual(
+                            tape=tape,
+                            factual_call_log=call_log or [],
+                            intervene_agent=None,
+                            intervene_text=intervention_text,
+                            intervene_call_idx=call_idx,
+                            choose="last",
+                            seed_fallback=parsed.seed + i + 10000 + (100 * call_idx) + s,
+                        )
+
+                        cf_traj = loop.run_until_complete(environment_cf.run(cf_task))
+                        cf_state = loop.run_until_complete(environment_cf.team.save_state())
+
+                        intervention_obj = {
+                            "cf_agent": call_agent,
+                            "cf_call_idx": call_idx,
+                            "cf_text": intervention_text,
+                            "selection_rule": "all_call_indices",
+                            "factual_response_text": entry.get("response_text", ""),
+                        }
+
+                        full_obj = {
+                            "sample_idx": s,
+                            "cf_task": cf_task,
+                            "intervention": intervention_obj,
+                            "team_states": cf_state,
+                            "trajectory": str(cf_traj),
+                            "call_log": hf_client.get_call_log(),
+                            "tape_status": hf_client.tape_status(),
+                            **_side_outputs(parsed.environment, environment_cf),
+                        }
+
+                        if parsed.compact_cf:
+                            compact_obj = _compact_cf_obj(
+                                call_idx=call_idx,
+                                agent=call_agent,
+                                sample_idx=s,
+                                cf_task=cf_task,
+                                intervention=intervention_obj,
+                                tape_status=hf_client.tape_status(),
+                                environment_obj=environment_cf,
+                            )
+                            compact_fp = os.path.join(cf_dir, f"call_{call_idx:03d}_sample_{s:03d}.json")
+                            _write_json(compact_fp, compact_obj)
+                            full_fp = os.path.join(cf_dir, f"call_{call_idx:03d}_sample_{s:03d}_full.json")
+                            _write_json(full_fp, full_obj)
+                            compact_run_refs.append({"sample_idx": s, "file": compact_fp, "full_file": full_fp})
+                        else:
+                            per_call_runs.append(full_obj)
+
+                    if parsed.compact_cf:
+                        call_index_obj = {
+                            "cf_call_idx": call_idx,
+                            "agent": call_agent,
+                            "factual_response_text": entry.get("response_text", ""),
+                            "runs": compact_run_refs,
+                        }
+                        idx_fp = os.path.join(cf_dir, f"call_{call_idx:03d}_index.json")
+                        _write_json(idx_fp, call_index_obj)
+                        cf_index_files.append(idx_fp)
+                    else:
+                        counterfactual_runs_by_call.append(
+                            {
+                                "cf_call_idx": call_idx,
+                                "agent": call_agent,
+                                "factual_response_text": entry.get("response_text", ""),
+                                "runs": per_call_runs,
+                            }
+                        )
+
+            else:
+                for s in range(parsed.cf_samples):
+                    environment_cf = _make_environment(parsed.environment, model_client, parsed.safe)
+                    _add_guardian_if_needed(environment_cf, model_client, parsed.guardian)
+
+                    adversarial_agent_cf = adversarial_agent_client.create_adv_agent(
+                        curr_target["Harmful_Behavior"],
+                        adversarial_agent_name,
+                        model_client,
+                    )
+                    environment_cf.replace_agent(adversarial_agent_name, adversarial_agent_cf)
+                    _wrap_environment_agents(environment_cf, hf_client)
+
+                    hf_client.begin_counterfactual(
+                        tape=tape,
+                        factual_call_log=call_log or [],
+                        intervene_agent=parsed.cf_agent,
+                        intervene_text=parsed.cf_text,
+                        intervene_call_idx=parsed.cf_call_idx,
+                        choose="last",
+                        seed_fallback=parsed.seed + i + 10000 + s,
+                    )
+
+                    cf_traj = loop.run_until_complete(environment_cf.run(cf_task))
+                    cf_state = loop.run_until_complete(environment_cf.team.save_state())
+
+                    full_obj = {
                         "sample_idx": s,
                         "cf_task": cf_task,
                         "intervention": {
@@ -634,40 +811,59 @@ if __name__ == "__main__":
                         "tape_status": hf_client.tape_status(),
                         **_side_outputs(parsed.environment, environment_cf),
                     }
-                )
 
-        curr_res: Dict[str, Any] = {
+                    if parsed.compact_cf:
+                        cf_dir = os.path.join(run_dir, "cf")
+                        os.makedirs(cf_dir, exist_ok=True)
+                        compact_obj = _compact_cf_obj(
+                            call_idx=parsed.cf_call_idx if parsed.cf_call_idx is not None else -1,
+                            agent=parsed.cf_agent if parsed.cf_agent is not None else "unknown",
+                            sample_idx=s,
+                            cf_task=cf_task,
+                            intervention=full_obj["intervention"],
+                            tape_status=full_obj["tape_status"],
+                            environment_obj=environment_cf,
+                        )
+                        compact_fp = os.path.join(cf_dir, f"single_intervention_sample_{s:03d}.json")
+                        _write_json(compact_fp, compact_obj)
+                        full_fp = os.path.join(cf_dir, f"single_intervention_sample_{s:03d}_full.json")
+                        _write_json(full_fp, full_obj)
+                        cf_index_files.append(compact_fp)
+                    else:
+                        counterfactual_runs.append(full_obj)
+
+        run_index_obj = {
             "id": int(curr_target["id"]) if "id" in curr_target else int(i),
-            "target_agent": target_agent,
-            "adversarial_agent": adversarial_agent_name,
-            "target_action": curr_target["Harmful_Behavior"],
-            "keywords": curr_target["Keyword"],
-            "backend": parsed.backend,
-            "environment": parsed.environment,
-            "task": task,
-            "seed": int(parsed.seed + i),
-            "safe": bool(parsed.safe),
-            "guardian": bool(parsed.guardian),
-            "factual": factual_side,
+            "run_dir": run_dir,
+            "factual_file": factual_fp,
+            "tape_file": tape_meta.get("tape_file") if tape_meta is not None else None,
+            "tape_meta_file": tape_meta_fp,
+            "counterfactual_run_index_files": cf_index_files,
         }
-        if tape_meta is not None:
-            curr_res["tape"] = tape_meta
         if counterfactual_runs:
-            curr_res["counterfactual_runs"] = counterfactual_runs
+            run_index_obj["counterfactual_runs"] = counterfactual_runs
+        if counterfactual_runs_by_call:
+            run_index_obj["counterfactual_runs_by_call"] = counterfactual_runs_by_call
 
-        results.append(curr_res)
+        _write_json(run_index_fp, run_index_obj)
 
-    model_name = parsed.hf_model_id.split("/")[-1] if parsed.backend == "hf" else parsed.model_client
-    method_tag = "gumbel" if parsed.backend == "hf" else "plain"
-    out_name = (
-        f"{model_name}_{method_tag}_{parsed.environment}_{len(target_actions)}_"
-        f"{parsed.adversarial_agent}_"
-        f"{'safe_' if parsed.safe else ''}"
-        f"{'_GUARDIAN' if parsed.guardian else ''}"
-        f"{parsed.id if parsed.id is not None else ''}.json"
+        manifest_rows.append(
+            {
+                "id": run_index_obj["id"],
+                "run_dir": run_dir,
+                "index_file": run_index_fp,
+            }
+        )
+
+    manifest_name = os.path.join(
+        parsed.output_root,
+        f"manifest_env={parsed.environment}_model={_safe_model_name()}_adv={parsed.adversarial_agent}"
+        f"{'_safe' if parsed.safe else ''}"
+        f"{'_guardian' if parsed.guardian else ''}"
+        f"{f'_id={parsed.id}' if parsed.id is not None else ''}.json",
     )
 
-    with open(out_name, "w") as f:
-        json.dump(results, f)
+    with open(manifest_name, "w") as f:
+        json.dump(manifest_rows, f)
 
-    print(f"Wrote: {out_name}")
+    print(f"Wrote manifest: {manifest_name}")
