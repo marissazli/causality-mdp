@@ -134,28 +134,49 @@ if __name__ == "__main__":
             continue
 
         cf_full_files = sorted(cf_dir.glob("call_*_sample_*_full.json"))
-        if not cf_full_files:
-            print(f"  [skip] no call_*_sample_*_full.json in {cf_dir}")
+
+        # build a flat list of (call_idx, sample_idx, cf_full_dict, source_path)
+        cf_entries = []
+
+        if cf_full_files:
+            for cf_path in cf_full_files:
+                stem = cf_path.stem.replace("_full", "")
+                parts = stem.split("_")
+                try:
+                    call_idx = int(parts[1])
+                    sample_idx = int(parts[3])
+                except (IndexError, ValueError):
+                    print(f"  [warn] unexpected filename format: {cf_path.name}")
+                    continue
+                cf_entries.append((call_idx, sample_idx, load_json(cf_path), str(cf_path)))
+        else:
+            # fallback: read from index.json counterfactual_runs_by_call
+            index_path = row_dir / "index.json"
+            if not index_path.exists():
+                print(f"  [skip] no _full.json files and no index.json in {row_dir}")
+                continue
+            index = load_json(index_path)
+            cf_by_call = index.get("counterfactual_runs_by_call", [])
+            if not cf_by_call:
+                print(f"  [skip] no counterfactual_runs_by_call in {index_path}")
+                continue
+            for call_entry in cf_by_call:
+                call_idx = int(call_entry["cf_call_idx"])
+                for run in call_entry.get("runs", []):
+                    sample_idx = int(run.get("sample_idx", 0))
+                    cf_entries.append((call_idx, sample_idx, run, str(index_path)))
+
+        if not cf_entries:
+            print(f"  [skip] no CF data found for {row_dir}")
             continue
 
-        for cf_path in cf_full_files:
-            # parse call_idx and sample_idx from filename: call_003_sample_000_full.json
-            stem = cf_path.stem.replace("_full", "")
-            parts = stem.split("_")
-            try:
-                call_idx = int(parts[1])
-                sample_idx = int(parts[3])
-            except (IndexError, ValueError):
-                print(f"  [warn] unexpected filename format: {cf_path.name}")
-                continue
-
-            cf_full = load_json(cf_path)
+        for call_idx, sample_idx, cf_full, source in cf_entries:
             cf_dp = make_eval_datapoint(factual, cf_full)
 
             try:
                 y_cf = float(bool(eval_fn(cf_dp)))
             except Exception as e:
-                print(f"  [warn] eval failed on {cf_path.name} for row {row_id}: {e}")
+                print(f"  [warn] eval failed on call {call_idx} sample {sample_idx} for row {row_id}: {e}")
                 y_cf = float("nan")
 
             causal_effect = y_cf - y_factual
@@ -169,7 +190,7 @@ if __name__ == "__main__":
                 "causal_effect": causal_effect,
                 "target_agent": factual.get("target_agent", None),
                 "cf_agent": cf_full.get("intervention", {}).get("cf_agent", None),
-                "cf_path": str(cf_path),
+                "cf_path": source,
             })
 
     if not rows:
