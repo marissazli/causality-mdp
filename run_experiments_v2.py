@@ -154,6 +154,8 @@ class HFModelClient:
         # tool registry: agent_name -> {tool_name -> FunctionTool}
         from collections import defaultdict
         self._tool_registry: Dict[str, Dict[str, Any]] = defaultdict(dict)
+        # dedup guard: set of call_idx values already intercepted
+        self._intercepted_call_ids: set = set()
 
     def begin_factual(self, *, seed: int) -> None:
         self._mode = "factual"
@@ -168,6 +170,7 @@ class HFModelClient:
         self._factual_call_log = []
         self._intervene_call_idx = None
         self._intervene_text = None
+        self._intercepted_call_ids = set()
 
     def begin_counterfactual(
         self,
@@ -227,6 +230,7 @@ class HFModelClient:
         self._factual_call_log = []
         self._intervene_call_idx = None
         self._intervene_text = None
+        self._intercepted_call_ids = set()
 
     def get_tape(self) -> List["torch.ByteTensor"]:
         return list(self._tape)
@@ -311,47 +315,137 @@ class HFModelClient:
             if name:
                 self._tool_registry[agent_name][name] = tool
 
-    def _tools_to_prompt(self, agent_name: str) -> str:
-        """Serialize registered tools for an agent into a prompt block."""
+    def _intercept_tool_call(self, agent_name: str, text: str) -> Optional[Dict[str, Any]]:
+        """
+        Detect implicit tool invocations from natural language output.
+        Returns {"name": tool_name, "arguments": {...}} or None.
+        Only fires once per call_idx to prevent duplicate tool executions.
+        """
+        import re as _re
+        tl = text.lower()
         tools = self._tool_registry.get(agent_name, {})
         if not tools:
-            return ""
-        lines = [
-            "",
-            "You have access to the following tools. To call a tool, respond with",
-            "valid JSON on its own line in exactly this format:",
-            '{"tool": "<tool_name>", "arguments": {<key>: <value>, ...}}',
-            "Available tools:",
-        ]
-        for name, tool in tools.items():
-            desc = getattr(tool, "description", "")
-            schema = getattr(tool, "schema", {})
-            if callable(schema):
-                schema = schema()
-            params = {}
-            if isinstance(schema, dict):
-                params = schema.get("parameters", {}).get("properties", {})
-            param_str = ", ".join(
-                f"{k}: {v.get('type', 'any')}" for k, v in params.items()
-            )
-            lines.append(f"  - {name}({param_str}): {desc}")
-        return "\n".join(lines)
+            return None
 
-    def _parse_tool_call(self, text: str) -> Optional[Dict[str, Any]]:
-        """Try to extract a JSON tool call from generated text."""
-        import re as _re
-        for match in _re.finditer(r'\{[^{}]*\}', text, _re.DOTALL):
-            try:
-                obj = json.loads(match.group())
-                if isinstance(obj, dict) and "tool" in obj:
-                    return obj
-            except Exception:
-                continue
+        # Dedup guard: only intercept once per call_idx
+        if self._call_idx in self._intercepted_call_ids:
+            return None
+
+        # MESSAGING_AGENT: detect send_email intent
+        if "send_email" in tools:
+            email_signals = [
+                "confirm_message=true", "successfully sent", "i have sent",
+                "sending the message", "sent the message", "sent a message",
+                "sent the email", "sending an email", "i will send",
+                "i am sending", "cancellation message", "confirmed the message",
+                "message has been sent", "message was sent",
+            ]
+            if any(sig in tl for sig in email_signals):
+                # extract recipient name: allow multi-word capitalized names and DiCaprio-style
+                to_match = _re.search(
+                    r"to\s+([A-Z][a-zA-Z]+(?:\s+(?:Di|De|Van|von|van)?\s*[A-Z][a-zA-Z]+)*)",
+                    text
+                )
+                to_addr = to_match.group(1).strip() if to_match else "unknown"
+                subj_match = _re.search(
+                    r"(?:subject|regarding|about)[:\s]+([^
+.]{5,80})",
+                    text, _re.IGNORECASE
+                )
+                subject = subj_match.group(1).strip() if subj_match else "Message"
+                self._intercepted_call_ids.add(self._call_idx)
+                return {
+                    "name": "send_email",
+                    "arguments": {
+                        "to": to_addr,
+                        "subject": subject,
+                        "body": text,
+                        "confirm_message": True,
+                    },
+                }
+
+        # TICKETING_AGENT: detect book_ticket intent
+        if "book_ticket" in tools:
+            ticket_signals = [
+                "confirm_booking=true", "successfully booked", "i have booked",
+                "booking confirmed", "tickets booked", "i will book",
+                "i am booking", "book the ticket", "reservations were made",
+                "confirmed the bookings", "tickets are reserved", "bookings for",
+                "have confirmed the booking",
+            ]
+            if any(sig in tl for sig in ticket_signals):
+                act_match = _re.search(
+                    r"(?:ticket|booking|reservation)\s+(?:for\s+)?([^
+,.]{3,60})",
+                    text, _re.IGNORECASE
+                )
+                activity = act_match.group(1).strip() if act_match else "activity"
+                self._intercepted_call_ids.add(self._call_idx)
+                return {
+                    "name": "book_ticket",
+                    "arguments": {"activity": activity, "confirm_booking": True},
+                }
+
+        # WEATHER_AGENT: detect get_weather intent
+        if "get_weather" in tools:
+            weather_signals = [
+                "weather forecast", "weather in", "checking the weather",
+                "get the weather", "weather for",
+            ]
+            if any(sig in tl for sig in weather_signals):
+                # match city including unicode chars like ü
+                city_match = _re.search(
+                    r"(?:weather\s+(?:in|for)|forecast\s+for)\s+([\wÀ-ž\s]{2,30})",
+                    text, _re.IGNORECASE
+                )
+                city = city_match.group(1).strip() if city_match else "unknown"
+                self._intercepted_call_ids.add(self._call_idx)
+                return {
+                    "name": "get_weather",
+                    "arguments": {"city": city},
+                }
+
         return None
+
+    async def _dispatch_intercepted_tool(
+        self, agent_name: str, tool_name: str, arguments: Dict[str, Any]
+    ) -> Optional[str]:
+        """Call the registered tool function and return result as string."""
+        tool = self._tool_registry.get(agent_name, {}).get(tool_name)
+        if tool is None:
+            return None
+        try:
+            fn = getattr(tool, "_func", None) or getattr(tool, "func", None)
+            if fn is None:
+                return None
+            import asyncio as _asyncio
+            if _asyncio.iscoroutinefunction(fn):
+                result = await fn(**arguments)
+            else:
+                result = fn(**arguments)
+            return str(result)
+        except Exception as e:
+            return f"Error calling {tool_name}: {e}"
+
+    def _is_reflection_call(self, messages) -> bool:
+        """Return True if autogen is asking for a post-tool reflection response."""
+        for m in reversed(messages):
+            role = getattr(m, "role", None) or (m.get("role") if isinstance(m, dict) else None)
+            msg_type = type(m).__name__
+            if role == "tool" or "ToolCallResult" in msg_type or "FunctionExecution" in msg_type:
+                return True
+            if role in ("user", "assistant", "system"):
+                break
+        return False
 
     async def create(self, messages, **kwargs) -> "CreateResult":
         agent_name = str(kwargs.get("_requesting_agent", "unknown"))
-        prompt_preview = ""
+
+        prompt = self._messages_to_prompt(messages)
+        prompt_preview = prompt[-250:]
+
+        # If autogen is asking for a reflection after tool execution, skip interception
+        is_reflection = self._is_reflection_call(messages)
 
         if (
             self._mode == "counterfactual"
@@ -359,9 +453,6 @@ class HFModelClient:
             and self._intervene_text is not None
             and self._call_idx == self._intervene_call_idx
         ):
-            prompt = self._messages_to_prompt(messages)
-            prompt_preview = prompt[-250:]
-
             if 0 <= self._call_idx < len(self._factual_call_log):
                 factual_entry = self._factual_call_log[self._call_idx]
                 tape_start = factual_entry.tape_start
@@ -389,13 +480,6 @@ class HFModelClient:
                 cached=False,
             )
 
-        # Inject tool descriptions for this agent if any are registered
-        has_tools = bool(self._tool_registry.get(agent_name))
-        prompt = self._messages_to_prompt(messages)
-        if has_tools:
-            prompt = prompt + self._tools_to_prompt(agent_name)
-        prompt_preview = prompt[-250:]
-
         tape_start = len(self._tape) if self._mode == "factual" else self._tape_pos
         text = self._generate_text_gumbel(prompt)
         tape_end = len(self._tape) if self._mode == "factual" else self._tape_pos
@@ -412,23 +496,24 @@ class HFModelClient:
         )
         self._call_idx += 1
 
-        # Try to parse a tool call from the generated text
-        if has_tools:
-            tool_call = self._parse_tool_call(text)
-            if tool_call is not None:
-                tool_name = tool_call.get("tool", "")
-                arguments = tool_call.get("arguments", {})
-                call_id = f"call_{self._call_idx}_{tool_name}"
-                return CreateResult(
-                    finish_reason="function_calls",
-                    content=[FunctionCall(
-                        id=call_id,
-                        name=tool_name,
-                        arguments=json.dumps(arguments),
-                    )],
-                    usage=RequestUsage(prompt_tokens=0, completion_tokens=0),
-                    cached=False,
-                )
+        # Intercept implicit tool calls from natural language (skip on reflections)
+        intercepted = None if is_reflection else self._intercept_tool_call(agent_name, text)
+        if intercepted is not None:
+            tool_name = intercepted["name"]
+            arguments = intercepted["arguments"]
+            # actually execute the tool so system state updates
+            await self._dispatch_intercepted_tool(agent_name, tool_name, arguments)
+            call_id = f"call_{self._call_idx}_{tool_name}"
+            return CreateResult(
+                finish_reason="function_calls",
+                content=[FunctionCall(
+                    id=call_id,
+                    name=tool_name,
+                    arguments=json.dumps(arguments),
+                )],
+                usage=RequestUsage(prompt_tokens=0, completion_tokens=0),
+                cached=False,
+            )
 
         return CreateResult(
             finish_reason="stop",
@@ -879,7 +964,9 @@ if __name__ == "__main__":
                             )
                             compact_fp = os.path.join(cf_dir, f"call_{call_idx:03d}_sample_{s:03d}.json")
                             _write_json(compact_fp, compact_obj)
-                            compact_run_refs.append({"sample_idx": s, "file": compact_fp})
+                            full_fp = os.path.join(cf_dir, f"call_{call_idx:03d}_sample_{s:03d}_full.json")
+                            _write_json(full_fp, full_obj)
+                            compact_run_refs.append({"sample_idx": s, "file": compact_fp, "full_file": full_fp})
                         else:
                             per_call_runs.append(full_obj)
 
@@ -959,6 +1046,8 @@ if __name__ == "__main__":
                         )
                         compact_fp = os.path.join(cf_dir, f"single_intervention_sample_{s:03d}.json")
                         _write_json(compact_fp, compact_obj)
+                        full_fp = os.path.join(cf_dir, f"single_intervention_sample_{s:03d}_full.json")
+                        _write_json(full_fp, full_obj)
                         cf_index_files.append(compact_fp)
                     else:
                         counterfactual_runs.append(full_obj)
