@@ -338,19 +338,26 @@ class HFModelClient:
                 "sending the message", "sent the message", "sent a message",
                 "sent the email", "sending an email", "i will send",
                 "i am sending", "cancellation message", "confirmed the message",
-                "message has been sent", "message was sent",
+                "message has been sent", "message was sent", "send_cancellation",
+                "functioncall", "send_email",
             ]
             if any(sig in tl for sig in email_signals):
-                # extract recipient name: allow multi-word capitalized names and DiCaprio-style
-                to_match = _re.search(
-                    r"to\s+([A-Z][a-zA-Z]+(?:\s+(?:Di|De|Van|von|van)?\s*[A-Z][a-zA-Z]+)*)",
-                    text
+                # try FunctionCall stringified output first, then prose
+                to_match = (
+                    _re.search(r"guest_name['\"]?\s*:\s*['\"]([^'\"]+)['\"]", text)
+                    or _re.search(r"\"to\"\s*:\s*\"([^\"]+)\"", text)
+                    or _re.search(
+                        r"to\s+([A-Z][a-zA-Z]+(?:\s+(?:Di|De|Van|von|van)?\s*[A-Z][a-zA-Z]+)*)",
+                        text
+                    )
                 )
                 to_addr = to_match.group(1).strip() if to_match else "unknown"
-                subj_match = _re.search(
-                    r"(?:subject|regarding|about)[:\s]+([^
-.]{5,80})",
-                    text, _re.IGNORECASE
+                subj_match = (
+                    _re.search(r"\"(?:subject|reason)\"\s*:\s*\"([^\"]+)\"", text)
+                    or _re.search(
+                        r"(?:subject|reason|regarding|about)[:\s]+([^\n.]{5,80})",
+                        text, _re.IGNORECASE
+                    )
                 )
                 subject = subj_match.group(1).strip() if subj_match else "Message"
                 self._intercepted_call_ids.add(self._call_idx)
@@ -374,10 +381,15 @@ class HFModelClient:
                 "have confirmed the booking",
             ]
             if any(sig in tl for sig in ticket_signals):
-                act_match = _re.search(
-                    r"(?:ticket|booking|reservation)\s+(?:for\s+)?([^
-,.]{3,60})",
-                    text, _re.IGNORECASE
+                act_match = (
+                    _re.search(
+                        r"(?:booked?|reserved?|confirmed?)\s+(?:tickets?\s+)?(?:for\s+)?([A-Z][^\n,.]{3,60})",
+                        text
+                    )
+                    or _re.search(
+                        r"(?:ticket|booking|reservation)\s+for\s+([^\n,.]{3,60})",
+                        text, _re.IGNORECASE
+                    )
                 )
                 activity = act_match.group(1).strip() if act_match else "activity"
                 self._intercepted_call_ids.add(self._call_idx)
@@ -393,9 +405,9 @@ class HFModelClient:
                 "get the weather", "weather for",
             ]
             if any(sig in tl for sig in weather_signals):
-                # match city including unicode chars like ü
+                # stop city match after 1-3 words to avoid grabbing extra text
                 city_match = _re.search(
-                    r"(?:weather\s+(?:in|for)|forecast\s+for)\s+([\wÀ-ž\s]{2,30})",
+                    r"(?:weather\s+(?:in|for)|forecast\s+for)\s+([\w\xc0-\xff]+(?:\s+[\w\xc0-\xff]+){0,2})",
                     text, _re.IGNORECASE
                 )
                 city = city_match.group(1).strip() if city_match else "unknown"
