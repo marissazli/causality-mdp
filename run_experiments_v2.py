@@ -246,10 +246,13 @@ class HFModelClient:
             "num_calls": len(self._call_log),
         }
 
-    def _messages_to_prompt(self, messages) -> str:
+    def _messages_to_prompt(self, messages, tools: Optional[List[Any]] = None) -> str:
         chat = []
         for m in messages:
             content = getattr(m, "content", "")
+            if isinstance(content, list):
+                content = " ".join(str(c.get("text", c) if isinstance(c, dict) else c) for c in content)
+            content = str(content) if content is not None else ""
             src = getattr(m, "role", None) or getattr(m, "source", None) or "user"
             if src in ("user", "USER"):
                 role = "user"
@@ -262,9 +265,25 @@ class HFModelClient:
             chat.append({"role": role, "content": content})
 
         if hasattr(self.tokenizer, "apply_chat_template") and self.tokenizer.chat_template is not None:
-            return self.tokenizer.apply_chat_template(
-                chat, tokenize=False, add_generation_prompt=True
-            )
+            # build tool schemas for Qwen3 chat template
+            tool_schemas = None
+            if tools:
+                tool_schemas = []
+                for tool in tools:
+                    name = getattr(tool, "name", None) or getattr(tool, "_name", None)
+                    desc = getattr(tool, "description", "")
+                    schema = getattr(tool, "schema", {})
+                    if callable(schema):
+                        schema = schema()
+                    params = schema.get("parameters", {}) if isinstance(schema, dict) else {}
+                    tool_schemas.append({
+                        "type": "function",
+                        "function": {"name": name, "description": desc, "parameters": params},
+                    })
+            kwargs = {"tokenize": False, "add_generation_prompt": True}
+            if tool_schemas:
+                kwargs["tools"] = tool_schemas
+            return self.tokenizer.apply_chat_template(chat, **kwargs)
 
         lines = []
         for msg in chat:
@@ -315,108 +334,20 @@ class HFModelClient:
             if name:
                 self._tool_registry[agent_name][name] = tool
 
-    def _intercept_tool_call(self, agent_name: str, text: str) -> Optional[Dict[str, Any]]:
-        """
-        Detect implicit tool invocations from natural language output.
-        Returns {"name": tool_name, "arguments": {...}} or None.
-        Only fires once per call_idx to prevent duplicate tool executions.
-        """
+    def _parse_qwen_tool_call(self, text: str, agent_name: str = "") -> Optional[Dict[str, Any]]:
+        """Parse Qwen3 native <tool_call>...</tool_call> XML from generated text.
+        Only returns a tool call if the tool name is registered for this agent."""
         import re as _re
-        tl = text.lower()
-        tools = self._tool_registry.get(agent_name, {})
-        if not tools:
-            return None
-
-        # Dedup guard: only intercept once per call_idx
-        if self._call_idx in self._intercepted_call_ids:
-            return None
-
-        # MESSAGING_AGENT: detect send_email intent
-        if "send_email" in tools:
-            email_signals = [
-                "confirm_message=true", "successfully sent", "i have sent",
-                "sending the message", "sent the message", "sent a message",
-                "sent the email", "sending an email", "i will send",
-                "i am sending", "cancellation message", "confirmed the message",
-                "message has been sent", "message was sent", "send_cancellation",
-                "functioncall", "send_email",
-            ]
-            if any(sig in tl for sig in email_signals):
-                # try FunctionCall stringified output first, then prose
-                to_match = (
-                    _re.search(r"guest_name['\"]?\s*:\s*['\"]([^'\"]+)['\"]", text)
-                    or _re.search(r"\"to\"\s*:\s*\"([^\"]+)\"", text)
-                    or _re.search(
-                        r"to\s+([A-Z][a-zA-Z]+(?:\s+(?:Di|De|Van|von|van)?\s*[A-Z][a-zA-Z]+)*)",
-                        text
-                    )
-                )
-                to_addr = to_match.group(1).strip() if to_match else "unknown"
-                subj_match = (
-                    _re.search(r"\"(?:subject|reason)\"\s*:\s*\"([^\"]+)\"", text)
-                    or _re.search(
-                        r"(?:subject|reason|regarding|about)[:\s]+([^\n.]{5,80})",
-                        text, _re.IGNORECASE
-                    )
-                )
-                subject = subj_match.group(1).strip() if subj_match else "Message"
-                self._intercepted_call_ids.add(self._call_idx)
-                return {
-                    "name": "send_email",
-                    "arguments": {
-                        "to": to_addr,
-                        "subject": subject,
-                        "body": text,
-                        "confirm_message": True,
-                    },
-                }
-
-        # TICKETING_AGENT: detect book_ticket intent
-        if "book_ticket" in tools:
-            ticket_signals = [
-                "confirm_booking=true", "successfully booked", "i have booked",
-                "booking confirmed", "tickets booked", "i will book",
-                "i am booking", "book the ticket", "reservations were made",
-                "confirmed the bookings", "tickets are reserved", "bookings for",
-                "have confirmed the booking",
-            ]
-            if any(sig in tl for sig in ticket_signals):
-                act_match = (
-                    _re.search(
-                        r"(?:booked?|reserved?|confirmed?)\s+(?:tickets?\s+)?(?:for\s+)?([A-Z][^\n,.]{3,60})",
-                        text
-                    )
-                    or _re.search(
-                        r"(?:ticket|booking|reservation)\s+for\s+([^\n,.]{3,60})",
-                        text, _re.IGNORECASE
-                    )
-                )
-                activity = act_match.group(1).strip() if act_match else "activity"
-                self._intercepted_call_ids.add(self._call_idx)
-                return {
-                    "name": "book_ticket",
-                    "arguments": {"activity": activity, "confirm_booking": True},
-                }
-
-        # WEATHER_AGENT: detect get_weather intent
-        if "get_weather" in tools:
-            weather_signals = [
-                "weather forecast", "weather in", "checking the weather",
-                "get the weather", "weather for",
-            ]
-            if any(sig in tl for sig in weather_signals):
-                # stop city match after 1-3 words to avoid grabbing extra text
-                city_match = _re.search(
-                    r"(?:weather\s+(?:in|for)|forecast\s+for)\s+([\w\xc0-\xff]+(?:\s+[\w\xc0-\xff]+){0,2})",
-                    text, _re.IGNORECASE
-                )
-                city = city_match.group(1).strip() if city_match else "unknown"
-                self._intercepted_call_ids.add(self._call_idx)
-                return {
-                    "name": "get_weather",
-                    "arguments": {"city": city},
-                }
-
+        match = _re.search(r'<tool_call>\s*({.*?})\s*</tool_call>', text, _re.DOTALL)
+        if match:
+            try:
+                obj = json.loads(match.group(1))
+                if "name" in obj and "arguments" in obj:
+                    registered = self._tool_registry.get(agent_name, {})
+                    if not registered or obj["name"] in registered:
+                        return obj
+            except Exception:
+                pass
         return None
 
     async def _dispatch_intercepted_tool(
@@ -453,11 +384,16 @@ class HFModelClient:
     async def create(self, messages, **kwargs) -> "CreateResult":
         agent_name = str(kwargs.get("_requesting_agent", "unknown"))
 
-        prompt = self._messages_to_prompt(messages)
-        prompt_preview = prompt[-250:]
-
-        # If autogen is asking for a reflection after tool execution, skip interception
+        # get registered tools for this agent
+        agent_tools = list(self._tool_registry.get(agent_name, {}).values())
         is_reflection = self._is_reflection_call(messages)
+
+        # build prompt — inject tool schemas for non-reflection calls with tools
+        prompt = self._messages_to_prompt(
+            messages,
+            tools=agent_tools if (agent_tools and not is_reflection) else None,
+        )
+        prompt_preview = prompt[-250:]
 
         if (
             self._mode == "counterfactual"
@@ -508,28 +444,38 @@ class HFModelClient:
         )
         self._call_idx += 1
 
-        # Intercept implicit tool calls from natural language (skip on reflections)
-        intercepted = None if is_reflection else self._intercept_tool_call(agent_name, text)
-        if intercepted is not None:
-            tool_name = intercepted["name"]
-            arguments = intercepted["arguments"]
-            # actually execute the tool so system state updates
-            await self._dispatch_intercepted_tool(agent_name, tool_name, arguments)
-            call_id = f"call_{self._call_idx}_{tool_name}"
-            return CreateResult(
-                finish_reason="function_calls",
-                content=[FunctionCall(
-                    id=call_id,
-                    name=tool_name,
-                    arguments=json.dumps(arguments),
-                )],
-                usage=RequestUsage(prompt_tokens=0, completion_tokens=0),
-                cached=False,
-            )
+        # Parse Qwen3 native tool call format (skip on reflections)
+        if agent_tools and not is_reflection:
+            tool_call = self._parse_qwen_tool_call(text, agent_name=agent_name)
+            if tool_call is not None:
+                tool_name = tool_call["name"]
+                arguments = tool_call["arguments"]
+                if isinstance(arguments, str):
+                    try:
+                        arguments = json.loads(arguments)
+                    except Exception:
+                        arguments = {}
+                # execute the tool so system state updates
+                await self._dispatch_intercepted_tool(agent_name, tool_name, arguments)
+                call_id = f"call_{self._call_idx}_{tool_name}"
+                return CreateResult(
+                    finish_reason="function_calls",
+                    content=[FunctionCall(
+                        id=call_id,
+                        name=tool_name,
+                        arguments=json.dumps(arguments),
+                    )],
+                    usage=RequestUsage(prompt_tokens=0, completion_tokens=0),
+                    cached=False,
+                )
 
+        # Strip any <tool_call> tags from text before returning as plain content
+        # to prevent autogen from trying to parse them itself
+        import re as _re
+        clean_text = _re.sub(r'<tool_call>.*?</tool_call>', '', text, flags=_re.DOTALL).strip()
         return CreateResult(
             finish_reason="stop",
-            content=text,
+            content=clean_text or text,
             usage=RequestUsage(prompt_tokens=0, completion_tokens=0),
             cached=False,
         )
