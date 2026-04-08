@@ -334,9 +334,22 @@ class HFModelClient:
             if name:
                 self._tool_registry[agent_name][name] = tool
 
+    # aliases: model may call these names, map to actual registered tool names
+    _TOOL_ALIASES: Dict[str, str] = {
+        "send_email": "send_message",
+        "send_email_message": "send_message",
+        "contact_business": "send_message",
+        "book_ticket": "book_activity",
+        "book_tickets": "book_activity",
+        "reserve_ticket": "book_activity",
+        "make_reservation": "book_activity",
+        "check_weather": "get_weather",
+        "weather_forecast": "get_weather",
+    }
+
     def _parse_qwen_tool_call(self, text: str, agent_name: str = "") -> Optional[Dict[str, Any]]:
         """Parse Qwen3 native <tool_call>...</tool_call> XML from generated text.
-        Only returns a tool call if the tool name is registered for this agent."""
+        Only returns a tool call if the tool name (or an alias) is registered for this agent."""
         import re as _re
         match = _re.search(r'<tool_call>\s*({.*?})\s*</tool_call>', text, _re.DOTALL)
         if match:
@@ -344,7 +357,13 @@ class HFModelClient:
                 obj = json.loads(match.group(1))
                 if "name" in obj and "arguments" in obj:
                     registered = self._tool_registry.get(agent_name, {})
-                    if not registered or obj["name"] in registered:
+                    tool_name = obj["name"]
+                    # resolve alias if needed
+                    if tool_name not in registered:
+                        tool_name = HFModelClient._TOOL_ALIASES.get(tool_name, tool_name)
+                    if not registered or tool_name in registered:
+                        obj = dict(obj)
+                        obj["name"] = tool_name
                         return obj
             except Exception:
                 pass
@@ -760,6 +779,9 @@ if __name__ == "__main__":
         tape = None
         call_log = None
 
+        # always create adversarial_agent_client so CF loop can use it in resume mode too
+        adversarial_agent_client = AdversarialAgent(parsed.environment)
+
         if is_resume_row and os.path.exists(factual_fp):
             print(f"[resume] row {row_id}: loading factual+tape from disk, resuming CF from call_idx={resume_call_start}")
             with open(factual_fp) as f:
@@ -772,7 +794,8 @@ if __name__ == "__main__":
                 call_log = tape_meta.get("call_log", [])
                 tape_file = tape_meta.get("tape_file")
                 if tape_file and os.path.exists(tape_file):
-                    tape = torch.load(tape_file, map_location=hf_client.device)
+                    tape = torch.load(tape_file, map_location=hf_client.device, weights_only=False)
+                    tape = [t.to(torch.uint8) if not isinstance(t, torch.ByteTensor) else t for t in tape]
                     tape_meta["tape_len"] = len(tape)
                 else:
                     print(f"[resume] warning: tape file not found for row {row_id}, CF may not work correctly")
