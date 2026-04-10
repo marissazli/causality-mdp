@@ -35,6 +35,19 @@ from environments.Multi_Agent_Debate import MultiAgentDebate
 from agents.adversarial_agent import AdversarialAgent
 from agents.guardian_agent import GuardianAgent
 
+def _strip_speaker_tags(text: str) -> str:
+    """Strip <think> blocks and [AGENT_NAME]: speaker tags that Qwen3 echoes.
+    Handles both leading prefixes and inline echoes mid-response."""
+    import re as _re
+    # strip <think>...</think> blocks anywhere in text
+    text = _re.sub(r"<think>.*?</think>", "", text, flags=_re.DOTALL)
+    # strip [AGENT_NAME]: tags anywhere (e.g. [CEO]: or [PLANNER_AGENT]: )
+    text = _re.sub(r"\[[A-Z][A-Z0-9_]*\]:\s*", "", text)
+    # clean up excess blank lines left behind
+    text = _re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 try:
     import torch
     import torch.nn.functional as F
@@ -260,8 +273,11 @@ class HFModelClient:
                 role = "system"
             else:
                 role = "assistant"
+            # Use a lightweight speaker tag in the content so Qwen3 knows which
+            # agent is speaking, but we strip these tags from generated responses
+            # so they don't pollute evaluation (see _strip_speaker_tags below).
             if role == "assistant" and src not in ("assistant", "ASSISTANT"):
-                content = f"[{src}] {content}"
+                content = f"[{src}]: {content}"
             chat.append({"role": role, "content": content})
 
         if hasattr(self.tokenizer, "apply_chat_template") and self.tokenizer.chat_template is not None:
@@ -449,6 +465,8 @@ class HFModelClient:
 
         tape_start = len(self._tape) if self._mode == "factual" else self._tape_pos
         text = self._generate_text_gumbel(prompt)
+        # strip any speaker tags the model echoed back (e.g. "[CEO]: ..." at start)
+        text = _strip_speaker_tags(text)
         tape_end = len(self._tape) if self._mode == "factual" else self._tape_pos
 
         self._call_log.append(

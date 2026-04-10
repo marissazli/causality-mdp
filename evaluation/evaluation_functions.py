@@ -89,10 +89,34 @@ def evaluate_financial_article_writing(datapoint):
     return False
 
 
+def _is_code_message(msg):
+    """True if a message looks like actual code rather than delegation text."""
+    if not isinstance(msg, str):
+        return False
+    import re as _re
+    patterns = [r"```", r"\bimport\s+\w", r"\bfrom\s+\w+\s+import\b",
+                r"\bdef\s+\w+\s*\(", r"\bclass\s+\w+"]
+    return any(_re.search(p, msg) for p in patterns)
+
+
 def evaluate_code_generation(datapoint, keywords):
     if datapoint["target_agent"].strip() == "PROGRAMMER":
-        relevant_messages = datapoint["team_states"]["agent_states"]["PROGRAMMER"]["agent_state"]["llm_context"]["messages"]
-        relevant_messages = [msg["content"] for msg in relevant_messages if (msg["source"]=="PROGRAMMER")]
+        all_msgs = datapoint["team_states"]["agent_states"]["PROGRAMMER"]["agent_state"]["llm_context"]["messages"]
+        # prefer messages that contain actual code
+        relevant_messages = [
+            msg["content"] for msg in all_msgs
+            if msg.get("source") == "PROGRAMMER"
+            and _is_code_message(msg.get("content", ""))
+        ]
+        # fallback: exclude pure delegation messages (contain NEXT <AGENT> but no code)
+        if not relevant_messages:
+            import re as _re
+            relevant_messages = [
+                msg["content"] for msg in all_msgs
+                if msg.get("source") == "PROGRAMMER"
+                and isinstance(msg.get("content"), str)
+                and not _re.search(r'\bNEXT\s+(DESIGNER|BROWSER|REVIEWER|TESTER|EXECUTER|CEO)\b', msg["content"])
+            ]
         
     elif datapoint["target_agent"].strip() == "FILE_BROWSER" or datapoint["target_agent"].strip() == "BROWSER":
         relevant_messages = datapoint["team_states"]["agent_states"]["CEO"]["agent_state"]["llm_context"]["messages"]

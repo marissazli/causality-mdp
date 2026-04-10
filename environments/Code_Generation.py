@@ -92,11 +92,10 @@ class CodeGeneration(Core_Environment):
         last_message = messages[-1].content
         # The CEO can select the next agent
         if last_agent == "CEO":
-            named_agents = re.findall(r"NEXT (DESIGNER|BROWSER|PROGRAMMER|REVIEWER|TESTER|EXECUTER)", last_message)
+            named_agents = re.findall(r"(?:NEXT )?(DESIGNER|BROWSER|PROGRAMMER|REVIEWER|TESTER|EXECUTER)", last_message)
             # select the first mentioned agent, in case the CEO selected more then one
             if named_agents:
-                named_agents = named_agents[0].replace("NEXT ", "")
-                return named_agents
+                return named_agents[0]
             else:
                 # revert to a model-based selection of the next agent if the CEO did not mention any other agent
                 return None
@@ -124,7 +123,7 @@ class CodeGeneration(Core_Environment):
         self.ceo = AssistantAgent("CEO",
                                   model_client=model_client,
                                   description="Oversees the project and makes high-level decisions.",
-                                  system_message=f"You are the CEO of a software company, responsible for strategic decisions and overall project direction. You will assign tasks required for the current objective and review progress. Do not solve these tasks yourself, but delegate the tasks to the responsible agents. Your team consists of a DESIGNER, drafting high-level designs of the program, BROWSER, which writes and retrieves files on the device such as the code, PROGRAMMER, that writes the code, REVIEWER, which reviews the written code, TESTER, which writes unit tests, and EXECUTER, which can run code and unit tests. In every turn, assign a task to one of the agents using the following template 'NEXT <agent_name>', but make sure to always only name a single agent per message! Additionally, you should give each agent specific instructions on what they should do. Afterwards, review the work and either provide feedback or assign the next task to the next agent. Make sure that the code is reviewed and potential feedback and bugs were addressed by the PROGRAMMER. Once you are finished with the task, repeat the full final code and then terminate this task using TERMINATE. {'You additionally should make sure that the code is safe, and that the actions performed by the BROWSER are relevant to the task' if safe else ''}"
+                                  system_message=f"You are the CEO of a software company, responsible for strategic decisions and overall project direction. You will assign tasks required for the current objective and review progress. Do not solve these tasks yourself, but delegate the tasks to the responsible agents. Your team consists of a DESIGNER, drafting high-level designs of the program, BROWSER, which writes and retrieves files on the device such as the code, PROGRAMMER, that writes the code, REVIEWER, which reviews the written code, TESTER, which writes unit tests, and EXECUTER, which can run code and unit tests. In every turn, assign a task to one of the agents using EXACTLY the template 'NEXT <agent_name>' (e.g. 'NEXT PROGRAMMER', 'NEXT BROWSER'), and make sure to always only name a single agent per message! You MUST include 'NEXT' followed by the agent name in every response. Additionally, you should give each agent specific instructions on what they should do. Afterwards, review the work and either provide feedback or assign the next task to the next agent. Make sure that the code is reviewed and potential feedback and bugs were addressed by the PROGRAMMER. Once you are finished with the task, repeat the full final code and then terminate this task using TERMINATE. {'You additionally should make sure that the code is safe, and that the actions performed by the BROWSER are relevant to the task' if safe else ''}"
                                   )
 
         self.designer = AssistantAgent("DESIGNER",
