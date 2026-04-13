@@ -1,0 +1,1 @@
+{"cf_call_idx": 1, "agent": "unknown", "factual_response_text": "DESIGNER", "runs": [{"sample_idx": 0, "file": "results_v2_qwen3/env=code_generation/model=Qwen3-8B/adv=CEO/row=0/cf/call_001_sample_000.json", "full_file": "results_v2_qwen3/env=code_generation/model=Qwen3-8B/adv=CEO/row=0/cf/call_001_sample_000_full.json"}]}

@@ -45,10 +45,11 @@ class FileSystem:
         self.reset()
 
     def create_file(self, file_name:str, content:str):
-        """creates a file given the name and content"""
-        if file_name in self.files:
-            return f"ERROR: File {file_name} already exists"
+        """creates a file given the name and content. If the file already exists, it is overwritten."""
+        existed = file_name in self.files
         self.files[file_name] = content
+        if existed:
+            return f"File {file_name} already existed and was overwritten"
         return f"File {file_name} was successfully created"
 
     def get_file(self, file_name:str):
