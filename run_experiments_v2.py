@@ -35,6 +35,20 @@ from environments.Multi_Agent_Debate import MultiAgentDebate
 from agents.adversarial_agent import AdversarialAgent
 from agents.guardian_agent import GuardianAgent
 
+
+def _strip_speaker_tags(text: str) -> str:
+    """Strip <think> blocks and [AGENT_NAME]: speaker tags that Qwen3 echoes.
+    Handles both leading prefixes and inline echoes mid-response."""
+    import re as _re
+    # strip <think>...</think> blocks anywhere in text
+    text = _re.sub(r"<think>.*?</think>", "", text, flags=_re.DOTALL)
+    # strip [AGENT_NAME]: tags anywhere (e.g. [CEO]: or [PLANNER_AGENT]: )
+    text = _re.sub(r"\[[A-Z][A-Z0-9_]*\]:\s*", "", text)
+    # clean up excess blank lines left behind
+    text = _re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 try:
     import torch
     import torch.nn.functional as F
@@ -248,6 +262,7 @@ class HFModelClient:
         intervene_agent: Optional[str] = None,
         intervene_call_idx: Optional[int] = None,
         choose: str = "last_preterminal",
+        target_agent: Optional[str] = None,
     ) -> int:
         entries = [
             CallLogEntry(
@@ -272,6 +287,7 @@ class HFModelClient:
             )
         last_overall_call_idx = max((e.call_idx for e in entries), default=-1)
         preterminal_matches = [idx for idx in matches if idx < last_overall_call_idx]
+
         if choose == "first":
             return matches[0]
         if choose == "last":
@@ -283,6 +299,26 @@ class HFModelClient:
                     f"Last overall call idx is {last_overall_call_idx}."
                 )
             return preterminal_matches[0]
+
+        if choose == "last_pre_target_agent":
+            # Find the last call of the target_agent (e.g. MESSAGING_AGENT) —
+            # this is where the bad act happened. Intervene on the last
+            # intervene_agent call strictly before that index.
+            # Falls back to last_preterminal if target_agent not found or not set.
+            cutoff = last_overall_call_idx  # default fallback
+            if target_agent:
+                target_calls = [e.call_idx for e in entries if e.agent == target_agent]
+                if target_calls:
+                    cutoff = max(target_calls)  # last target agent call = bad act call
+            pre_target_matches = [idx for idx in matches if idx < cutoff]
+            if pre_target_matches:
+                return pre_target_matches[-1]
+            # fallback: use last match if no pre-target matches found
+            print(f"[cf] last_pre_target_agent: no {intervene_agent!r} calls before "
+                  f"{target_agent!r} call at idx {cutoff}, falling back to last.")
+            return matches[-1]
+
+        # default: last_preterminal
         if not preterminal_matches:
             raise ValueError(
                 f"Agent {intervene_agent!r} has no preterminal calls in factual call log. "
@@ -342,7 +378,7 @@ class HFModelClient:
             else:
                 role = "assistant"
             if role == "assistant" and src not in ("assistant", "ASSISTANT"):
-                content = f"[{src}] {content}"
+                content = f"[{src}]: {content}"
             chat.append({"role": role, "content": content})
 
         if hasattr(self.tokenizer, "apply_chat_template") and self.tokenizer.chat_template is not None:
@@ -530,6 +566,7 @@ class HFModelClient:
 
         tape_start = len(self._tape) if self._mode == "factual" else self._tape_pos
         text = self._generate_text_gumbel(prompt)
+        text = _strip_speaker_tags(text)
         tape_end = len(self._tape) if self._mode == "factual" else self._tape_pos
 
         self._call_log.append(
@@ -805,9 +842,15 @@ if __name__ == "__main__":
     args.add_argument("--cf-all-calls", action="store_true")
     args.add_argument(
         "--cf-selection-rule",
-        choices=["last_preterminal", "last", "first_preterminal", "first"],
+        choices=["last_preterminal", "last", "first_preterminal", "first", "last_pre_target_agent"],
         default="last_preterminal",
-        help="How to pick an intervention call when using --cf-agent instead of --cf-call-idx.",
+        help="How to pick an intervention call when using --cf-agent instead of --cf-call-idx. "
+             "last_pre_target_agent: last intervene_agent call before the target_agent's last call (bad act).",
+    )
+    args.add_argument(
+        "--cf-target-agent", type=str, default=None,
+        help="For --cf-selection-rule last_pre_target_agent: the agent whose last call marks the bad act "
+             "(e.g. MESSAGING_AGENT). Defaults to the target_agent from the dataset row.",
     )
 
     args.add_argument("--export-tape", action="store_true")
@@ -1164,11 +1207,17 @@ if __name__ == "__main__":
                     environment_cf.replace_agent(adversarial_agent_name, adversarial_agent_cf)
                     _wrap_environment_agents(environment_cf, hf_client)
 
+                    _cf_target_agent = (
+                        parsed.cf_target_agent
+                        or curr_target.get("Target", "").strip()
+                        or None
+                    )
                     resolved_cf_call_idx = HFModelClient.resolve_intervention_call_idx(
                         call_log or [],
                         intervene_agent=parsed.cf_agent,
                         intervene_call_idx=parsed.cf_call_idx,
                         choose=parsed.cf_selection_rule,
+                        target_agent=_cf_target_agent,
                     )
                     factual_entry = HFModelClient.get_factual_call_entry(call_log or [], resolved_cf_call_idx) or {}
                     factual_response_text = factual_entry.get("response_text", "")
