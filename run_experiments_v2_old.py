@@ -35,6 +35,19 @@ from environments.Multi_Agent_Debate import MultiAgentDebate
 from agents.adversarial_agent import AdversarialAgent
 from agents.guardian_agent import GuardianAgent
 
+def _strip_speaker_tags(text: str) -> str:
+    """Strip <think> blocks and [AGENT_NAME]: speaker tags that Qwen3 echoes.
+    Handles both leading prefixes and inline echoes mid-response."""
+    import re as _re
+    # strip <think>...</think> blocks anywhere in text
+    text = _re.sub(r"<think>.*?</think>", "", text, flags=_re.DOTALL)
+    # strip [AGENT_NAME]: tags anywhere (e.g. [CEO]: or [PLANNER_AGENT]: )
+    text = _re.sub(r"\[[A-Z][A-Z0-9_]*\]:\s*", "", text)
+    # clean up excess blank lines left behind
+    text = _re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 try:
     import torch
     import torch.nn.functional as F
@@ -180,7 +193,7 @@ class HFModelClient:
         intervene_agent: Optional[str] = None,
         intervene_text: Optional[str] = None,
         intervene_call_idx: Optional[int] = None,
-        choose: str = "last_preterminal",
+        choose: str = "last",
         seed_fallback: int = 0,
     ) -> None:
         self._mode = "counterfactual"
@@ -217,88 +230,7 @@ class HFModelClient:
                     f"Agent {intervene_agent!r} not found in factual call log. "
                     f"Available agents: {sorted(set(e.agent for e in self._factual_call_log))}"
                 )
-
-            last_overall_call_idx = max((e.call_idx for e in self._factual_call_log), default=-1)
-            preterminal_matches = [idx for idx in matches if idx < last_overall_call_idx]
-
-            if choose == "first":
-                self._intervene_call_idx = matches[0]
-            elif choose == "last":
-                self._intervene_call_idx = matches[-1]
-            elif choose == "first_preterminal":
-                if not preterminal_matches:
-                    raise ValueError(
-                        f"Agent {intervene_agent!r} has no preterminal calls in factual call log. "
-                        f"Last overall call idx is {last_overall_call_idx}."
-                    )
-                self._intervene_call_idx = preterminal_matches[0]
-            else:
-                # default: intervene on the agent's last response before the final output / termination call
-                if not preterminal_matches:
-                    raise ValueError(
-                        f"Agent {intervene_agent!r} has no preterminal calls in factual call log. "
-                        f"Use --cf-call-idx or choose='last' to intervene on the terminal call instead."
-                    )
-                self._intervene_call_idx = preterminal_matches[-1]
-
-    @staticmethod
-    def resolve_intervention_call_idx(
-        factual_call_log: Sequence[Dict[str, Any]],
-        *,
-        intervene_agent: Optional[str] = None,
-        intervene_call_idx: Optional[int] = None,
-        choose: str = "last_preterminal",
-    ) -> int:
-        entries = [
-            CallLogEntry(
-                call_idx=int(x["call_idx"]),
-                agent=str(x["agent"]),
-                tape_start=int(x.get("tape_start", 0)),
-                tape_end=int(x.get("tape_end", 0)),
-                prompt_preview=str(x.get("prompt_preview", "")),
-                response_text=str(x.get("response_text", "")),
-            )
-            for x in factual_call_log
-        ]
-        if intervene_call_idx is not None:
-            return int(intervene_call_idx)
-        if intervene_agent is None:
-            raise ValueError("Need intervene_agent or intervene_call_idx to resolve intervention call")
-        matches = [e.call_idx for e in entries if e.agent == intervene_agent]
-        if not matches:
-            raise ValueError(
-                f"Agent {intervene_agent!r} not found in factual call log. "
-                f"Available agents: {sorted(set(e.agent for e in entries))}"
-            )
-        last_overall_call_idx = max((e.call_idx for e in entries), default=-1)
-        preterminal_matches = [idx for idx in matches if idx < last_overall_call_idx]
-        if choose == "first":
-            return matches[0]
-        if choose == "last":
-            return matches[-1]
-        if choose == "first_preterminal":
-            if not preterminal_matches:
-                raise ValueError(
-                    f"Agent {intervene_agent!r} has no preterminal calls in factual call log. "
-                    f"Last overall call idx is {last_overall_call_idx}."
-                )
-            return preterminal_matches[0]
-        if not preterminal_matches:
-            raise ValueError(
-                f"Agent {intervene_agent!r} has no preterminal calls in factual call log. "
-                f"Use --cf-call-idx or choose='last' to intervene on the terminal call instead."
-            )
-        return preterminal_matches[-1]
-
-    @staticmethod
-    def get_factual_call_entry(
-        factual_call_log: Sequence[Dict[str, Any]],
-        resolved_call_idx: int,
-    ) -> Optional[Dict[str, Any]]:
-        for entry in factual_call_log:
-            if int(entry["call_idx"]) == int(resolved_call_idx):
-                return entry
-        return None
+            self._intervene_call_idx = matches[-1] if choose == "last" else matches[0]
 
     def disable_tape(self) -> None:
         self._mode = "plain"
@@ -341,8 +273,11 @@ class HFModelClient:
                 role = "system"
             else:
                 role = "assistant"
+            # Use a lightweight speaker tag in the content so Qwen3 knows which
+            # agent is speaking, but we strip these tags from generated responses
+            # so they don't pollute evaluation (see _strip_speaker_tags below).
             if role == "assistant" and src not in ("assistant", "ASSISTANT"):
-                content = f"[{src}] {content}"
+                content = f"[{src}]: {content}"
             chat.append({"role": role, "content": content})
 
         if hasattr(self.tokenizer, "apply_chat_template") and self.tokenizer.chat_template is not None:
@@ -530,6 +465,8 @@ class HFModelClient:
 
         tape_start = len(self._tape) if self._mode == "factual" else self._tape_pos
         text = self._generate_text_gumbel(prompt)
+        # strip any speaker tags the model echoed back (e.g. "[CEO]: ..." at start)
+        text = _strip_speaker_tags(text)
         tape_end = len(self._tape) if self._mode == "factual" else self._tape_pos
 
         self._call_log.append(
@@ -695,81 +632,6 @@ def _side_outputs(environment_name: str, environment: Any) -> Dict[str, Any]:
     return out
 
 
-def _default_baseline_text(environment_name: str, agent_name: Optional[str] = None) -> str:
-    agent_name = (agent_name or "").strip()
-    if environment_name == "travel_planning":
-        if agent_name == "PLANNER_AGENT":
-            return "I have no additional planning recommendation. Please continue based on the existing discussion."
-        if agent_name == "RECOMMENDER_AGENT":
-            return "I have no recommendation right now. Please continue without my input."
-        if agent_name == "WEATHER_AGENT":
-            return "I have no weather-based recommendation. Please continue without my input."
-        if agent_name == "MESSAGING_AGENT":
-            return "I do not recommend sending any message at this step. Please continue without my input."
-        if agent_name == "TICKETING_AGENT":
-            return "I do not recommend booking anything at this step. Please continue without my input."
-        return "I have no additional recommendation. Please continue based on the existing discussion."
-    if environment_name == "financial_article_writing":
-        if agent_name == "CHIEF_EDITOR":
-            return "I have no additional editorial direction right now. Please continue based on the existing discussion."
-        if agent_name == "RESEARCHER":
-            return "I have no additional research recommendation right now. Please continue without my input."
-        if agent_name == "ASSISTANT":
-            return "I have no additional research findings right now. Please continue without my input."
-        if agent_name == "EDITOR":
-            return "I have no additional editorial recommendation right now. Please continue based on the existing discussion."
-        if agent_name == "IMAGE_GENERATOR":
-            return "I have no image suggestion right now. Please continue without my input."
-        if agent_name == "WRITER":
-            return "I have no additional writing recommendation right now. Please continue based on the existing discussion."
-        return "I have no additional recommendation. Please continue based on the existing discussion."
-    if environment_name == "code_generation":
-        if agent_name == "CEO":
-            return "No additional task assignment. Please continue based on the existing discussion."
-        if agent_name == "DESIGNER":
-            return "No design changes recommended. Please continue based on the existing discussion."
-        if agent_name == "BROWSER":
-            return "No file operation recommended. Please continue based on the existing discussion."
-        if agent_name == "PROGRAMMER":
-            return "No code changes recommended. Please continue based on the existing discussion."
-        if agent_name == "REVIEWER":
-            return "No review comments. Please continue based on the existing discussion."
-        if agent_name == "TESTER":
-            return "No additional tests recommended. Please continue based on the existing discussion."
-        if agent_name == "EXECUTER":
-            return "No execution recommendation. Please continue based on the existing discussion."
-        return "No additional recommendation. Please continue based on the existing discussion."
-    if environment_name == "multi_agent_debate":
-        return "I have no additional critique. Please continue based on the existing discussion."
-    return "I have no additional recommendation. Please continue based on the existing discussion."
-
-
-def _resolve_intervention_text(
-    *,
-    mode: str,
-    explicit_cf_text: Optional[str],
-    factual_response_text: Optional[str],
-    environment_name: str,
-    agent_name: Optional[str],
-    baseline_text: Optional[str] = None,
-) -> str:
-    if mode == "custom":
-        if explicit_cf_text is None:
-            raise ValueError("--cf-mode custom requires --cf-text")
-        return explicit_cf_text
-    if mode == "replay":
-        if factual_response_text is None:
-            raise ValueError("Replay mode requires a factual response text for the selected call")
-        return factual_response_text
-    if mode == "baseline":
-        if baseline_text is not None:
-            return baseline_text
-        if explicit_cf_text is not None:
-            return explicit_cf_text
-        return _default_baseline_text(environment_name, agent_name)
-    raise ValueError(f"Unknown cf mode: {mode}")
-
-
 if __name__ == "__main__":
     args = ArgumentParser()
     args.add_argument("--backend", choices=["ollama", "openai", "hf"], default="ollama")
@@ -796,19 +658,9 @@ if __name__ == "__main__":
     args.add_argument("--cf-samples", type=int, default=0)
     args.add_argument("--cf-agent", type=str, default=None)
     args.add_argument("--cf-text", type=str, default=None)
-    args.add_argument("--cf-mode", choices=["custom", "baseline", "replay"], default="baseline",
-                      help="custom: use --cf-text; baseline: use neutral no-op/defer text; replay: reuse the factual selected response text.")
-    args.add_argument("--cf-baseline-text", type=str, default=None,
-                      help="Optional override for baseline mode. If omitted, a default neutral text is chosen from the environment/agent.")
     args.add_argument("--cf-call-idx", type=int, default=None)
     args.add_argument("--cf-task", type=str, default=None)
     args.add_argument("--cf-all-calls", action="store_true")
-    args.add_argument(
-        "--cf-selection-rule",
-        choices=["last_preterminal", "last", "first_preterminal", "first"],
-        default="last_preterminal",
-        help="How to pick an intervention call when using --cf-agent instead of --cf-call-idx.",
-    )
 
     args.add_argument("--export-tape", action="store_true")
     args.add_argument("--tape-dir", type=str, default="results/tapes")
@@ -1029,8 +881,8 @@ if __name__ == "__main__":
             and (
                 parsed.cf_all_calls
                 or (
-                    (parsed.cf_agent is not None or parsed.cf_call_idx is not None)
-                    and (parsed.cf_mode != "custom" or parsed.cf_text is not None)
+                    parsed.cf_text is not None
+                    and (parsed.cf_agent is not None or parsed.cf_call_idx is not None)
                 )
             )
         )
@@ -1039,6 +891,7 @@ if __name__ == "__main__":
             cf_task = parsed.cf_task if parsed.cf_task is not None else task
 
             if parsed.cf_all_calls:
+                intervention_text = parsed.cf_text if parsed.cf_text is not None else " "
                 factual_entries = call_log or []
                 cf_dir = os.path.join(run_dir, "cf")
                 os.makedirs(cf_dir, exist_ok=True)
@@ -1066,24 +919,13 @@ if __name__ == "__main__":
                         environment_cf.replace_agent(adversarial_agent_name, adversarial_agent_cf)
                         _wrap_environment_agents(environment_cf, hf_client)
 
-                        factual_entry = HFModelClient.get_factual_call_entry(call_log or [], call_idx) or {}
-                        factual_response_text = factual_entry.get("response_text", "")
-                        intervention_text = _resolve_intervention_text(
-                            mode=parsed.cf_mode,
-                            explicit_cf_text=parsed.cf_text,
-                            factual_response_text=factual_response_text,
-                            environment_name=parsed.environment,
-                            agent_name=call_agent,
-                            baseline_text=parsed.cf_baseline_text,
-                        )
-
                         hf_client.begin_counterfactual(
                             tape=tape,
                             factual_call_log=call_log or [],
                             intervene_agent=None,
                             intervene_text=intervention_text,
                             intervene_call_idx=call_idx,
-                            choose=parsed.cf_selection_rule,
+                            choose="last",
                             seed_fallback=parsed.seed + i + 10000 + (100 * call_idx) + s,
                         )
 
@@ -1093,13 +935,9 @@ if __name__ == "__main__":
                         intervention_obj = {
                             "cf_agent": call_agent,
                             "cf_call_idx": call_idx,
-                            "resolved_cf_call_idx": call_idx,
                             "cf_text": intervention_text,
-                            "cf_mode": parsed.cf_mode,
                             "selection_rule": "all_call_indices",
-                            "semantic_rule": "intervene on each factual call, skip that call's factual tape span, and replay downstream calls with preserved tape",
-                            "factual_response_text": factual_response_text,
-                            "baseline_text": parsed.cf_baseline_text,
+                            "factual_response_text": entry.get("response_text", ""),
                         }
 
                         full_obj = {
@@ -1164,31 +1002,13 @@ if __name__ == "__main__":
                     environment_cf.replace_agent(adversarial_agent_name, adversarial_agent_cf)
                     _wrap_environment_agents(environment_cf, hf_client)
 
-                    resolved_cf_call_idx = HFModelClient.resolve_intervention_call_idx(
-                        call_log or [],
-                        intervene_agent=parsed.cf_agent,
-                        intervene_call_idx=parsed.cf_call_idx,
-                        choose=parsed.cf_selection_rule,
-                    )
-                    factual_entry = HFModelClient.get_factual_call_entry(call_log or [], resolved_cf_call_idx) or {}
-                    factual_response_text = factual_entry.get("response_text", "")
-                    resolved_cf_agent = factual_entry.get("agent", parsed.cf_agent)
-                    intervention_text = _resolve_intervention_text(
-                        mode=parsed.cf_mode,
-                        explicit_cf_text=parsed.cf_text,
-                        factual_response_text=factual_response_text,
-                        environment_name=parsed.environment,
-                        agent_name=resolved_cf_agent,
-                        baseline_text=parsed.cf_baseline_text,
-                    )
-
                     hf_client.begin_counterfactual(
                         tape=tape,
                         factual_call_log=call_log or [],
                         intervene_agent=parsed.cf_agent,
-                        intervene_text=intervention_text,
+                        intervene_text=parsed.cf_text,
                         intervene_call_idx=parsed.cf_call_idx,
-                        choose=parsed.cf_selection_rule,
+                        choose="last",
                         seed_fallback=parsed.seed + i + 10000 + s,
                     )
 
@@ -1199,19 +1019,10 @@ if __name__ == "__main__":
                         "sample_idx": s,
                         "cf_task": cf_task,
                         "intervention": {
-                            "cf_agent": resolved_cf_agent,
+                            "cf_agent": parsed.cf_agent,
                             "cf_call_idx": parsed.cf_call_idx,
-                            "resolved_cf_call_idx": resolved_cf_call_idx,
-                            "cf_text": intervention_text,
-                            "cf_mode": parsed.cf_mode,
-                            "selection_rule": (
-                                parsed.cf_selection_rule if parsed.cf_agent is not None else "call_idx"
-                            ),
-                            "semantic_rule": (
-                                "intervene on chosen call, skip that call's factual tape span, and replay downstream calls with preserved tape"
-                            ),
-                            "factual_response_text": factual_response_text,
-                            "baseline_text": parsed.cf_baseline_text,
+                            "cf_text": parsed.cf_text,
+                            "selection_rule": "last_agent_turn" if parsed.cf_agent is not None else "call_idx",
                         },
                         "team_states": cf_state,
                         "trajectory": str(cf_traj),

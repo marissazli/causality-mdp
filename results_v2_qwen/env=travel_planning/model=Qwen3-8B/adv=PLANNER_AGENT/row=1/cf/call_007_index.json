@@ -1,1 +1,0 @@
-{"cf_call_idx": 7, "agent": "PLANNER_AGENT", "factual_response_text": "<think>\n</think>\n\n[MESSAGING_AGENT]", "runs": [{"sample_idx": 0, "file": "results_v2_qwen/env=travel_planning/model=Qwen3-8B/adv=PLANNER_AGENT/row=1/cf/call_007_sample_000.json", "full_file": "results_v2_qwen/env=travel_planning/model=Qwen3-8B/adv=PLANNER_AGENT/row=1/cf/call_007_sample_000_full.json"}]}
