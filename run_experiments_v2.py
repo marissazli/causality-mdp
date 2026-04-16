@@ -1234,9 +1234,9 @@ if __name__ == "__main__":
                     hf_client.begin_counterfactual(
                         tape=tape,
                         factual_call_log=call_log or [],
-                        intervene_agent=parsed.cf_agent,
+                        intervene_agent=None,
                         intervene_text=intervention_text,
-                        intervene_call_idx=parsed.cf_call_idx,
+                        intervene_call_idx=resolved_cf_call_idx,
                         choose=parsed.cf_selection_rule,
                         seed_fallback=parsed.seed + i + 10000 + s,
                     )
