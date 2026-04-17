@@ -1,0 +1,135 @@
+`torch_dtype` is deprecated! Use `dtype` instead!
+Loading checkpoint shards:   0%|          | 0/5 [00:00<?, ?it/s]Loading checkpoint shards:  20%|██        | 1/5 [00:01<00:06,  1.56s/it]Loading checkpoint shards:  40%|████      | 2/5 [00:03<00:04,  1.55s/it]Loading checkpoint shards:  60%|██████    | 3/5 [00:04<00:03,  1.52s/it]Loading checkpoint shards:  80%|████████  | 4/5 [00:05<00:01,  1.37s/it]Loading checkpoint shards: 100%|██████████| 5/5 [00:06<00:00,  1.03s/it]Loading checkpoint shards: 100%|██████████| 5/5 [00:06<00:00,  1.23s/it]
+Error processing publish message for CHIEF_EDITOR_fdc57701-c9a9-4956-ae2c-65540b4b8216/fdc57701-c9a9-4956-ae2c-65540b4b8216
+Traceback (most recent call last):
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_core/_single_threaded_agent_runtime.py", line 533, in _on_message
+    return await agent.on_message(
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_core/_base_agent.py", line 113, in on_message
+    return await self.on_message_impl(message, ctx)
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_agentchat/teams/_group_chat/_sequential_routed_agent.py", line 67, in on_message_impl
+    return await super().on_message_impl(message, ctx)
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_core/_routed_agent.py", line 485, in on_message_impl
+    return await h(self, message, ctx)
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_core/_routed_agent.py", line 268, in wrapper
+    return_value = await func(self, message, ctx)  # type: ignore
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_agentchat/teams/_group_chat/_chat_agent_container.py", line 79, in handle_request
+    async for msg in self._agent.on_messages_stream(self._message_buffer, ctx.cancellation_token):
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_agentchat/agents/_assistant_agent.py", line 827, in on_messages_stream
+    async for inference_output in self._call_llm(
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_agentchat/agents/_assistant_agent.py", line 955, in _call_llm
+    model_result = await model_client.create(
+  File "/u/marissa/causality-mdp/run_experiments_v2.py", line 629, in create
+    return await self._base.create(messages, **kwargs)
+  File "/u/marissa/causality-mdp/run_experiments_v2.py", line 568, in create
+    text = self._generate_text_gumbel(prompt)
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+  File "/u/marissa/causality-mdp/run_experiments_v2.py", line 425, in _generate_text_gumbel
+    self._gen.set_state(self._tape[self._tape_pos])
+TypeError: RNG state must be a torch.ByteTensor
+Error processing publish message for RESEARCHER_fdc57701-c9a9-4956-ae2c-65540b4b8216/fdc57701-c9a9-4956-ae2c-65540b4b8216
+Traceback (most recent call last):
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_core/_single_threaded_agent_runtime.py", line 533, in _on_message
+    return await agent.on_message(
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_core/_base_agent.py", line 113, in on_message
+    return await self.on_message_impl(message, ctx)
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_agentchat/teams/_group_chat/_sequential_routed_agent.py", line 72, in on_message_impl
+    return await super().on_message_impl(message, ctx)
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_core/_routed_agent.py", line 486, in on_message_impl
+    return await self.on_unhandled_message(message, ctx)  # type: ignore
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_agentchat/teams/_group_chat/_chat_agent_container.py", line 133, in on_unhandled_message
+    raise ValueError(f"Unhandled message in agent container: {type(message)}")
+ValueError: Unhandled message in agent container: <class 'autogen_agentchat.teams._group_chat._events.GroupChatError'>
+Error processing publish message for ASSISTANT_fdc57701-c9a9-4956-ae2c-65540b4b8216/fdc57701-c9a9-4956-ae2c-65540b4b8216
+Traceback (most recent call last):
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_core/_single_threaded_agent_runtime.py", line 533, in _on_message
+    return await agent.on_message(
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_core/_base_agent.py", line 113, in on_message
+    return await self.on_message_impl(message, ctx)
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_agentchat/teams/_group_chat/_sequential_routed_agent.py", line 72, in on_message_impl
+    return await super().on_message_impl(message, ctx)
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_core/_routed_agent.py", line 486, in on_message_impl
+    return await self.on_unhandled_message(message, ctx)  # type: ignore
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_agentchat/teams/_group_chat/_chat_agent_container.py", line 133, in on_unhandled_message
+    raise ValueError(f"Unhandled message in agent container: {type(message)}")
+ValueError: Unhandled message in agent container: <class 'autogen_agentchat.teams._group_chat._events.GroupChatError'>
+Error processing publish message for EDITOR_fdc57701-c9a9-4956-ae2c-65540b4b8216/fdc57701-c9a9-4956-ae2c-65540b4b8216
+Traceback (most recent call last):
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_core/_single_threaded_agent_runtime.py", line 533, in _on_message
+    return await agent.on_message(
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_core/_base_agent.py", line 113, in on_message
+    return await self.on_message_impl(message, ctx)
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_agentchat/teams/_group_chat/_sequential_routed_agent.py", line 72, in on_message_impl
+    return await super().on_message_impl(message, ctx)
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_core/_routed_agent.py", line 486, in on_message_impl
+    return await self.on_unhandled_message(message, ctx)  # type: ignore
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_agentchat/teams/_group_chat/_chat_agent_container.py", line 133, in on_unhandled_message
+    raise ValueError(f"Unhandled message in agent container: {type(message)}")
+ValueError: Unhandled message in agent container: <class 'autogen_agentchat.teams._group_chat._events.GroupChatError'>
+Error processing publish message for IMAGE_GENERATOR_fdc57701-c9a9-4956-ae2c-65540b4b8216/fdc57701-c9a9-4956-ae2c-65540b4b8216
+Traceback (most recent call last):
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_core/_single_threaded_agent_runtime.py", line 533, in _on_message
+    return await agent.on_message(
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_core/_base_agent.py", line 113, in on_message
+    return await self.on_message_impl(message, ctx)
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_agentchat/teams/_group_chat/_sequential_routed_agent.py", line 72, in on_message_impl
+    return await super().on_message_impl(message, ctx)
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_core/_routed_agent.py", line 486, in on_message_impl
+    return await self.on_unhandled_message(message, ctx)  # type: ignore
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_agentchat/teams/_group_chat/_chat_agent_container.py", line 133, in on_unhandled_message
+    raise ValueError(f"Unhandled message in agent container: {type(message)}")
+ValueError: Unhandled message in agent container: <class 'autogen_agentchat.teams._group_chat._events.GroupChatError'>
+Error processing publish message for WRITER_fdc57701-c9a9-4956-ae2c-65540b4b8216/fdc57701-c9a9-4956-ae2c-65540b4b8216
+Traceback (most recent call last):
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_core/_single_threaded_agent_runtime.py", line 533, in _on_message
+    return await agent.on_message(
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_core/_base_agent.py", line 113, in on_message
+    return await self.on_message_impl(message, ctx)
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_agentchat/teams/_group_chat/_sequential_routed_agent.py", line 72, in on_message_impl
+    return await super().on_message_impl(message, ctx)
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_core/_routed_agent.py", line 486, in on_message_impl
+    return await self.on_unhandled_message(message, ctx)  # type: ignore
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_agentchat/teams/_group_chat/_chat_agent_container.py", line 133, in on_unhandled_message
+    raise ValueError(f"Unhandled message in agent container: {type(message)}")
+ValueError: Unhandled message in agent container: <class 'autogen_agentchat.teams._group_chat._events.GroupChatError'>
+[resume] row 0: loading factual+tape from disk, resuming CF from call_idx=0
+---------- TextMessage (user) ----------
+Write an article
+Traceback (most recent call last):
+  File "/u/marissa/causality-mdp/run_experiments_v2.py", line 1244, in <module>
+    cf_traj = loop.run_until_complete(environment_cf.run(cf_task))
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 649, in run_until_complete
+    return future.result()
+  File "/u/marissa/causality-mdp/environments/Core_Environment.py", line 15, in run
+    return await Console(self.team.run_stream(task = task))
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_agentchat/ui/_console.py", line 117, in Console
+    async for message in stream:
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_agentchat/teams/_group_chat/_base_group_chat.py", line 518, in run_stream
+    raise RuntimeError(str(message.error))
+RuntimeError: TypeError: RNG state must be a torch.ByteTensor
+Traceback:
+Traceback (most recent call last):
+
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_agentchat/teams/_group_chat/_chat_agent_container.py", line 79, in handle_request
+    async for msg in self._agent.on_messages_stream(self._message_buffer, ctx.cancellation_token):
+
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_agentchat/agents/_assistant_agent.py", line 827, in on_messages_stream
+    async for inference_output in self._call_llm(
+
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/autogen_agentchat/agents/_assistant_agent.py", line 955, in _call_llm
+    model_result = await model_client.create(
+
+  File "/u/marissa/causality-mdp/run_experiments_v2.py", line 629, in create
+    return await self._base.create(messages, **kwargs)
+
+  File "/u/marissa/causality-mdp/run_experiments_v2.py", line 568, in create
+    text = self._generate_text_gumbel(prompt)
+
+  File "/u/marissa/causality-mdp/.venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+
+  File "/u/marissa/causality-mdp/run_experiments_v2.py", line 425, in _generate_text_gumbel
+    self._gen.set_state(self._tape[self._tape_pos])
+
+TypeError: RNG state must be a torch.ByteTensor
+
