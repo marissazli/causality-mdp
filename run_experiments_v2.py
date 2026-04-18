@@ -281,10 +281,12 @@ class HFModelClient:
             raise ValueError("Need intervene_agent or intervene_call_idx to resolve intervention call")
         matches = [e.call_idx for e in entries if e.agent == intervene_agent]
         if not matches:
-            raise ValueError(
-                f"Agent {intervene_agent!r} not found in factual call log. "
-                f"Available agents: {sorted(set(e.agent for e in entries))}"
-            )
+            # agent never called in this row — fall back to last overall call
+            all_indices = sorted(set(e.call_idx for e in entries))
+            print(f"[cf] {intervene_agent!r} not found in factual call log "
+                  f"(available: {sorted(set(e.agent for e in entries))}), "
+                  f"falling back to last call idx {all_indices[-1]}.")
+            return all_indices[-1]
         last_overall_call_idx = max((e.call_idx for e in entries), default=-1)
         preterminal_matches = [idx for idx in matches if idx < last_overall_call_idx]
 
