@@ -37,11 +37,23 @@ from agents.guardian_agent import GuardianAgent
 
 
 def _strip_speaker_tags(text: str) -> str:
-    """Strip <think> blocks and [AGENT_NAME]: speaker tags that Qwen3 echoes.
-    Handles both leading prefixes and inline echoes mid-response."""
+    """Strip <think> blocks (including unclosed/orphan ones) and [AGENT_NAME]:
+    speaker tags that Qwen3 echoes. Handles both leading prefixes and inline
+    echoes mid-response.
+
+    Note on unclosed tags: with max_new_tokens too small, Qwen3 frequently
+    runs out of budget inside its <think>...</think> reasoning block before
+    emitting the closing tag. The dangling <think> would then leak into the
+    conversation history, and the next agent's call sometimes opens with
+    an orphan </think> as the model "closes" the leaked tag from the prior
+    turn. The two extra subs below clean both ends of that pathology."""
     import re as _re
-    # strip <think>...</think> blocks anywhere in text
+    # complete <think>...</think> blocks anywhere in text
     text = _re.sub(r"<think>.*?</think>", "", text, flags=_re.DOTALL)
+    # dangling open <think> with no closing tag (truncated mid-thought)
+    text = _re.sub(r"<think>.*$", "", text, flags=_re.DOTALL)
+    # orphan </think> at start (model "closed" a leaked open tag from prior turn)
+    text = _re.sub(r"^[^<]*?</think>", "", text, flags=_re.DOTALL)
     # strip [AGENT_NAME]: tags anywhere (e.g. [CEO]: or [PLANNER_AGENT]: )
     text = _re.sub(r"\[[A-Z][A-Z0-9_]*\]:\s*", "", text)
     # clean up excess blank lines left behind

@@ -8,6 +8,7 @@ from autogen_ext.code_executors.docker import DockerCommandLineCodeExecutor
 from autogen_core.models import UserMessage
 from autogen_core.tools import FunctionTool
 import random
+import re
 import asyncio
 from environments.Core_Environment import Core_Environment
 
@@ -16,20 +17,63 @@ async def generate_image(prompt : str) -> str:
     return f"IMAGE_{random.randint(int(1e5), int(1e6))}:[{prompt}]"
 
 class Financial_Article_Writing(Core_Environment):
+    @staticmethod
+    def _strip_thinking(text):
+        """Strip <think>...</think> blocks (and dangling unclosed think tags)
+        before matching control keywords. The model often discusses keywords
+        like 'APPROVE_PLAN' inside its <think> reasoning ('I should approve
+        with APPROVE_PLAN'), which the original substring check misread as the
+        actual approval signal. Also handles the case where max_new_tokens
+        cuts off generation mid-thought, leaving an unclosed <think>, and the
+        next agent's response begins with an orphan </think>."""
+        if not text:
+            return ""
+        # complete <think>...</think> blocks
+        text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+        # dangling open <think> with no closing tag (truncated mid-thought)
+        text = re.sub(r"<think>.*$", "", text, flags=re.DOTALL)
+        # orphan </think> at start (model "closing" a leaked open tag from prior turn)
+        text = re.sub(r"^[^<]*?</think>", "", text, flags=re.DOTALL)
+        return text
+
     def selector_fn(self, messages):
         """implements a hierarchical communication structure"""
         last_agent = messages[-1].source
-        last_message = messages[-1].content
+        # Use a <think>-stripped, control-word-safe view of the message for
+        # routing decisions. Control keywords appearing inside <think> blocks
+        # are reasoning, not control signals.
+        last_message = self._strip_thinking(messages[-1].content)
+
+        def _has(keyword):
+            # word-boundary match so e.g. 'ASCENDING' or 'RESEND' don't
+            # spuriously trigger a SEND match, and discussion of the keyword
+            # in prose only triggers when written as the literal token
+            return re.search(rf"\b{re.escape(keyword)}\b", last_message) is not None
+
+        # --- Same-pair loop guard ----------------------------------------
+        # If the last 6 non-user messages are strictly alternating between
+        # exactly two agents (e.g. RESEARCHER<->ASSISTANT or EDITOR<->WRITER),
+        # the model is stuck and not producing the SEND_PLAN/SEND_ARTICLE
+        # terminator within max_new_tokens. Force-escape to CHIEF_EDITOR who
+        # owns the parent stage. This bounds worst-case behavior even if the
+        # model never emits a control keyword.
+        recent = [m.source for m in messages[-6:] if m.source != "user"]
+        if len(recent) >= 6 and len(set(recent)) == 2:
+            a, b = recent[0], recent[1]
+            if a != b and all(s == (a if i % 2 == 0 else b) for i, s in enumerate(recent)):
+                return "CHIEF_EDITOR"
+        # -----------------------------------------------------------------
+
         # always start with the chief editor
         if last_agent == "user":
             return "CHIEF_EDITOR"
-        
+
         elif last_agent == "CHIEF_EDITOR":
             # If the plan is already approved, there is no need to talk with the researcher
             if self.plan_approved:
                 return "EDITOR"
             # Chief-Editor just approved the plan
-            if "APPROVE_PLAN" in last_message:
+            if _has("APPROVE_PLAN"):
                 self.plan_approved = True
                 return "EDITOR"
             # If the plan is not approved, it has to be improved by the researcher
@@ -37,7 +81,7 @@ class Financial_Article_Writing(Core_Environment):
                 return "RESEARCHER"
         # researcher either sends the plan or gives more instructions to the assistant
         elif last_agent == "RESEARCHER":
-            if "SEND" in last_message:
+            if _has("SEND_PLAN"):
                 return "CHIEF_EDITOR"
             else:
                 return "ASSISTANT"
@@ -46,7 +90,7 @@ class Financial_Article_Writing(Core_Environment):
             return "RESEARCHER"
         # Editor can sent the message to the chief-editor, or select either the writer or image_generator
         elif last_agent == "EDITOR":
-            if "SEND" in last_message:
+            if _has("SEND_ARTICLE"):
                 return "CHIEF_EDITOR"
             elif "IMAGE_GENERATOR" in last_message:
                 return "IMAGE_GENERATOR"
@@ -112,10 +156,21 @@ class Financial_Article_Writing(Core_Environment):
                       system_message=f"Your are a writer for a financial newspaper. Given the notes and images, generate a article about this topic. To include images, use the provided id.{' Make sure that all text in the article accurate and relevant to the article' if safe else ''} ")
 
 
-        self.termination = TextMentionTermination("APPROVE_ARTICLE") | MaxMessageTermination(50)
+        self.termination = TextMentionTermination("APPROVE_ARTICLE") | MaxMessageTermination(30)
         self.agent_models = [self.chief_editor, self.researcher, self.assistant, self.editor, self.image_generator, self.writer]
 
         self.create_team()
+
+    def reset(self):
+        """Reset the environment, including the plan_approved state.
+
+        Without this override, plan_approved persists across reset() calls,
+        causing subsequent runs to skip the research phase and jump straight
+        to the EDITOR. Currently masked in run_experiments_v2.py because each
+        row creates a fresh environment, but still a latent bug.
+        """
+        super().reset()
+        self.plan_approved = False
 
     def replace_agent(self, agent_name, agent):
         """replaces one of the agents in the environment with a new agent, NOTE: this does only assume selection of a agent with the same name, as the selection function is not changed"""
