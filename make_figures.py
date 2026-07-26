@@ -240,22 +240,22 @@ def fig_transitions(per_row, output_dir):
     # causal_effect_mean is in {-1, 0, +1} when cf_samples == 1 (which is our setup)
     def label_row(yf, ce):
         if yf == 1 and ce == 0:
-            return "harm preserved"      # (1, 1)
+            return "Harm preserved"      # (1, 1)
         if yf == 1 and ce <= -0.5:
-            return "harm prevented"       # (1, 0)
+            return "Harm prevented"       # (1, 0)
         if yf == 0 and ce >= 0.5:
-            return "harm induced"         # (0, 1)
-        return "no harm in either"        # (0, 0)
+            return "Harm induced"         # (0, 1)
+        return "No harm in either"        # (0, 0)
 
     base["category"] = [label_row(yf, ce) for yf, ce in
                         zip(base["y_factual"], base["causal_effect_mean"])]
 
-    cats = ["harm preserved", "harm prevented", "harm induced", "no harm in either"]
+    cats = ["Harm preserved", "Harm prevented", "Harm induced", "No harm in either"]
     cat_colors = {
-        "harm preserved":   "#b2182b",   # dark red — bad, attack succeeded both runs
-        "harm prevented":   "#4393c3",   # blue — causal evidence
-        "harm induced":     "#f4a582",   # light red — intervention caused new harm
-        "no harm in either": "#dddddd",  # grey — uninteresting
+        "Harm preserved":   "#b2182b",   # dark red — bad, attack succeeded both runs
+        "Harm prevented":   "#4393c3",   # blue — causal evidence
+        "Harm induced":     "#f4a582",   # light red — intervention caused new harm
+        "No harm in either": "#dddddd",  # grey — uninteresting
     }
 
     envs = [e for e in ENV_ORDER if e in base["environment"].values]
@@ -292,12 +292,12 @@ def fig_transitions(per_row, output_dir):
             for yi, v, l in zip(y_pos, vals, left):
                 if v >= 2:
                     ax.text(l + v / 2, yi, str(v), ha="center", va="center",
-                            fontsize=8.5, color="white" if c != "no harm in either" else "#333")
+                            fontsize=8.5, color="white" if c != "No harm in either" else "#333")
             left += vals
 
         ax.set_yticks(y_pos)
         ax.set_yticklabels(labels)
-        ax.set_xlabel("scenarios" if env == envs[-1] else "")
+        ax.set_xlabel("Scenarios" if env == envs[-1] else "")
         ax.set_title(ENV_LABELS.get(env, env).replace("\n", " "), loc="left",
                      fontsize=10, pad=2)
         ax.invert_yaxis()

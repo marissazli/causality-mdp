@@ -3,11 +3,13 @@ code_generation,False,baseline,-0.019230769230769232,0.2417570174892117,52
 code_generation,False,replay,0.0,0.0,52
 code_generation,True,baseline,-0.019230769230769232,0.2417570174892117,52
 code_generation,True,replay,0.0,0.0,52
+financial_article_writing,False,baseline,-0.07692307692307693,0.43594179527636284,52
+financial_article_writing,True,baseline,-0.046875,0.2777281701735287,64
 multi_agent_debate,False,baseline,0.0,0.0,18
 multi_agent_debate,False,replay,0.0,0.0,18
 multi_agent_debate,True,baseline,0.0,0.0,18
 multi_agent_debate,True,replay,0.0,0.0,18
 travel_planning,False,baseline,-0.075,0.4167948520770725,40
 travel_planning,False,replay,0.0,0.0,40
-travel_planning,True,baseline,0.025,0.5304811555656397,40
+travel_planning,True,baseline,-0.05,0.5038314736557788,40
 travel_planning,True,replay,0.0,0.0,40
