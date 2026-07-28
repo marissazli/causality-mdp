@@ -306,6 +306,7 @@ def fig_transitions(per_row, output_dir):
         ax.spines["left"].set_visible(False)
         ax.tick_params(axis="y", length=0)
         ax.tick_params(axis="x", labelsize=8)
+        ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
 
     # single legend at the top
     handles = [mpatches.Patch(facecolor=cat_colors[c], edgecolor="white", label=c) for c in cats]

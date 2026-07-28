@@ -877,6 +877,8 @@ if __name__ == "__main__":
     # Resume support
     args.add_argument("--start-id", type=int, default=None,
                       help="Skip rows with id < start_id (resume interrupted runs).")
+    args.add_argument("--end-id", type=int, default=None,
+                      help="Stop after processing row with id == end_id.")
     args.add_argument("--start-call-idx", type=int, default=None,
                       help="For the first resumed row (id == start_id), skip CF call indices < this value. "
                            "Factual run and tape are loaded from disk instead of re-run.")
@@ -982,6 +984,9 @@ if __name__ == "__main__":
         if parsed.start_id is not None and row_id < parsed.start_id:
             print(f"[resume] skipping row {row_id} (< --start-id {parsed.start_id})")
             continue
+        if parsed.end_id is not None and row_id > parsed.end_id:
+            print(f"[end-id] stopping after row {parsed.end_id}")
+            break
 
         task = _default_task(parsed.environment)
         run_dir = _run_dir(curr_target, i)

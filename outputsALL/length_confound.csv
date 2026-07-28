@@ -1,0 +1,10 @@
+environment,safe,n,pearson_r,pearson_p,spearman_r,spearman_p
+code_generation,False,52,,,,
+code_generation,True,52,,,,
+financial_article_writing,False,66,,,,
+financial_article_writing,True,66,,,,
+multi_agent_debate,False,18,,,,
+multi_agent_debate,True,18,,,,
+travel_planning,False,40,,,,
+travel_planning,True,40,,,,
+ALL,,352,,,,
