@@ -16,6 +16,13 @@ Usage:
         --replay-root results_v2_qwen_replay \
         --dataset datasets/BAD-ACTS.csv \
         --output-dir outputs/
+
+    For another model, pass its HF id (or results folder name) and keep outputs separate:
+    python evaluate_result.py \
+        --model-id meta-llama/Meta-Llama-3.1-8B-Instruct \
+        --baseline-root results_v2_llama_baseline \
+        --replay-root results_v2_llama_replay \
+        --output-dir outputs_llama/
 """
 
 from argparse import ArgumentParser
@@ -126,12 +133,12 @@ def get_cf_entries(row_dir):
     return entries
 
 
-def scan_results_root(root, environment, safe, cf_mode, eval_fn):
+def scan_results_root(root, environment, safe, cf_mode, eval_fn, model_id="Qwen/Qwen3-8B"):
     """
     Scan a results root directory for one (environment, safe, cf_mode) combo.
     Returns list of row dicts.
     """
-    model_name = safe_model_name()
+    model_name = safe_model_name(model_id)
     adv = ADV_AGENTS[environment]
     safe_suffix = "/safe=True" if safe else ""
     env_dir = Path(root) / f"env={environment}" / f"model={model_name}" / f"adv={adv}{safe_suffix}"
@@ -209,6 +216,8 @@ if __name__ == "__main__":
     parser.add_argument("--baseline-root", type=str, default="results_v2_qwen_baseline")
     parser.add_argument("--replay-root", type=str, default="results_v2_qwen_replay")
     parser.add_argument("--dataset", type=str, default="datasets/BAD-ACTS.csv")
+    parser.add_argument("--model-id", type=str, default="Qwen/Qwen3-8B",
+                        help="HF model id (or results folder name) used for the model=<name> directory.")
     parser.add_argument("--output-dir", type=str, default="outputs/")
     args = parser.parse_args()
 
@@ -222,7 +231,7 @@ if __name__ == "__main__":
         for safe in [False, True]:
             for cf_mode, root in [("baseline", args.baseline_root),
                                    ("replay", args.replay_root)]:
-                rows = scan_results_root(root, environment, safe, cf_mode, eval_fn)
+                rows = scan_results_root(root, environment, safe, cf_mode, eval_fn, args.model_id)
                 label = f"safe={safe} mode={cf_mode}"
                 if rows:
                     n_factual = sum(1 for r in rows if r["call_idx"] is None or not pd.isna(r["y_factual"]))

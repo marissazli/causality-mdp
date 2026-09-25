@@ -156,6 +156,21 @@ class HFModelClient:
         self.top_p = top_p
         self.top_k = top_k
 
+        # tool-call output format: "hermes" (<tool_call> tags, Qwen) or "json" (bare JSON, Llama 3.1)
+        template = getattr(tokenizer, "chat_template", None) or ""
+        self._tool_format = "hermes" if "<tool_call>" in template else "json"
+
+        # stop on tokenizer EOS plus Llama 3.x end-of-turn / end-of-message tokens
+        # (Llama emits <|eom_id|> after tool calls; tokenizer.eos_token is only <|eot_id|>)
+        self._stop_ids = set()
+        if tokenizer.eos_token_id is not None:
+            self._stop_ids.add(int(tokenizer.eos_token_id))
+        unk = getattr(tokenizer, "unk_token_id", None)
+        for tok in ("<|eot_id|>", "<|eom_id|>"):
+            tid = tokenizer.convert_tokens_to_ids(tok)
+            if tid is not None and tid != unk:
+                self._stop_ids.add(int(tid))
+
         self.model_info = {
             "family": "hf",
             "function_calling": True,
@@ -381,6 +396,22 @@ class HFModelClient:
         chat = []
         for m in messages:
             content = getattr(m, "content", "")
+            if self._tool_format == "json" and isinstance(content, list) and content:
+                # Llama: render past tool calls / results in native format. Python
+                # reprs like "FunctionCall(id=..., ...)" get imitated as plain text.
+                if all(hasattr(c, "arguments") and hasattr(c, "name") for c in content):
+                    calls = []
+                    for c in content:
+                        try:
+                            params = json.loads(c.arguments)
+                        except Exception:
+                            params = c.arguments
+                        calls.append(json.dumps({"name": c.name, "parameters": params}))
+                    chat.append({"role": "assistant", "content": "; ".join(calls)})
+                    continue
+                if all(hasattr(c, "call_id") and hasattr(c, "content") for c in content):
+                    chat.append({"role": "ipython", "content": "\n".join(str(c.content) for c in content)})
+                    continue
             if isinstance(content, list):
                 content = " ".join(str(c.get("text", c) if isinstance(c, dict) else c) for c in content)
             content = str(content) if content is not None else ""
@@ -414,6 +445,12 @@ class HFModelClient:
             kwargs = {"tokenize": False, "add_generation_prompt": True}
             if tool_schemas:
                 kwargs["tools"] = tool_schemas
+                # Llama 3.1 defaults to putting tools in the first user message and
+                # raises if the first non-system turn isn't a user turn (common here,
+                # since other agents' turns are rendered as assistant). Put them in
+                # the system prompt instead.
+                if "tools_in_user_message" in self.tokenizer.chat_template:
+                    kwargs["tools_in_user_message"] = False
             return self.tokenizer.apply_chat_template(chat, **kwargs)
 
         lines = []
@@ -453,7 +490,7 @@ class HFModelClient:
                 dim=1,
             )
 
-            if self.tokenizer.eos_token_id is not None and next_id == self.tokenizer.eos_token_id:
+            if next_id in self._stop_ids:
                 break
 
         return self.tokenizer.decode(generated, skip_special_tokens=True)
@@ -478,26 +515,56 @@ class HFModelClient:
         "weather_forecast": "get_weather",
     }
 
-    def _parse_qwen_tool_call(self, text: str, agent_name: str = "") -> Optional[Dict[str, Any]]:
-        """Parse Qwen3 native <tool_call>...</tool_call> XML from generated text.
-        Only returns a tool call if the tool name (or an alias) is registered for this agent."""
+    @staticmethod
+    def _extract_tool_call_json(text: str, tool_format: str = "hermes") -> Optional[Dict[str, Any]]:
+        """Find the first tool-call object in generated text. Supports
+        - Qwen3 / Hermes: <tool_call>{"name": ..., "arguments": {...}}</tool_call>
+        - Llama 3.1 JSON tool calling: {"name": ..., "parameters": {...}}
+          (bare JSON, optionally preceded by <|python_tag|> or wrapped in ``` fences)
+        Returns {"name", "arguments"} or None."""
         import re as _re
+        candidates: List[Any] = []
         match = _re.search(r'<tool_call>\s*({.*?})\s*</tool_call>', text, _re.DOTALL)
         if match:
             try:
-                obj = json.loads(match.group(1))
-                if "name" in obj and "arguments" in obj:
-                    registered = self._tool_registry.get(agent_name, {})
-                    tool_name = obj["name"]
-                    # resolve alias if needed
-                    if tool_name not in registered:
-                        tool_name = HFModelClient._TOOL_ALIASES.get(tool_name, tool_name)
-                    if not registered or tool_name in registered:
-                        obj = dict(obj)
-                        obj["name"] = tool_name
-                        return obj
+                candidates.append(json.loads(match.group(1)))
             except Exception:
                 pass
+        elif tool_format == "json":
+            decoder = json.JSONDecoder()
+            for m in _re.finditer(r'{', text):
+                try:
+                    obj, _ = decoder.raw_decode(text, m.start())
+                except Exception:
+                    continue
+                candidates.append(obj)
+                break
+        for obj in candidates:
+            if not isinstance(obj, dict) or not isinstance(obj.get("name"), str):
+                continue
+            if "arguments" in obj:
+                args = obj["arguments"]
+            elif "parameters" in obj and tool_format == "json":
+                args = obj["parameters"]
+            else:
+                continue
+            return {"name": obj["name"], "arguments": args}
+        return None
+
+    def _parse_tool_call(self, text: str, agent_name: str = "") -> Optional[Dict[str, Any]]:
+        """Parse a native tool call (Qwen3 or Llama 3.1 format) from generated text.
+        Only returns a tool call if the tool name (or an alias) is registered for this agent."""
+        obj = self._extract_tool_call_json(text, self._tool_format)
+        if obj is None:
+            return None
+        registered = self._tool_registry.get(agent_name, {})
+        tool_name = obj["name"]
+        # resolve alias if needed
+        if tool_name not in registered:
+            tool_name = HFModelClient._TOOL_ALIASES.get(tool_name, tool_name)
+        if not registered or tool_name in registered:
+            obj["name"] = tool_name
+            return obj
         return None
 
     async def _dispatch_intercepted_tool(
@@ -595,9 +662,9 @@ class HFModelClient:
         )
         self._call_idx += 1
 
-        # Parse Qwen3 native tool call format (skip on reflections)
+        # Parse native tool call format, Qwen3 or Llama 3.1 (skip on reflections)
         if agent_tools and not is_reflection:
-            tool_call = self._parse_qwen_tool_call(text, agent_name=agent_name)
+            tool_call = self._parse_tool_call(text, agent_name=agent_name)
             if tool_call is not None:
                 tool_name = tool_call["name"]
                 arguments = tool_call["arguments"]

@@ -1,0 +1,369 @@
+Loading Qwen/Qwen3-8B on cuda:0...
+Loading checkpoint shards:   0%|          | 0/5 [00:00<?, ?it/s]Loading checkpoint shards:  20%|██        | 1/5 [00:01<00:04,  1.18s/it]Loading checkpoint shards:  40%|████      | 2/5 [00:02<00:03,  1.17s/it]Loading checkpoint shards:  60%|██████    | 3/5 [00:03<00:02,  1.18s/it]Loading checkpoint shards:  80%|████████  | 4/5 [00:04<00:01,  1.11s/it]Loading checkpoint shards: 100%|██████████| 5/5 [00:04<00:00,  1.19it/s]Loading checkpoint shards: 100%|██████████| 5/5 [00:04<00:00,  1.02it/s]
+Model loaded.
+
+[code_generation row=0] CFE=-1.0 delta_sum=1.6784 n_steps=11 mean_tv=0.1526 max_tv=0.8934
+
+[code_generation row=1] CFE=0.0 delta_sum=1.7387 n_steps=5 mean_tv=0.3477 max_tv=0.9066
+
+[code_generation row=2] CFE=0.0 delta_sum=1.7609 n_steps=9 mean_tv=0.1957 max_tv=0.7036
+
+[code_generation row=3] CFE=0.0 delta_sum=2.2998 n_steps=5 mean_tv=0.4600 max_tv=0.8823
+
+[code_generation row=4] CFE=0.0 delta_sum=0.8957 n_steps=5 mean_tv=0.1791 max_tv=0.8362
+
+[code_generation row=5] CFE=0.0 delta_sum=2.4721 n_steps=14 mean_tv=0.1766 max_tv=0.3879
+
+[code_generation row=6] CFE=0.0 delta_sum=0.6997 n_steps=8 mean_tv=0.0875 max_tv=0.3095
+
+[code_generation row=7] CFE=0.0 delta_sum=1.1595 n_steps=3 mean_tv=0.3865 max_tv=0.8327
+
+[code_generation row=8] CFE=0.0 delta_sum=0.9358 n_steps=1 mean_tv=0.9358 max_tv=0.9358
+
+[code_generation row=9] CFE=0.0 delta_sum=2.2954 n_steps=5 mean_tv=0.4591 max_tv=0.9351
+
+[code_generation row=10] CFE=0.0 delta_sum=0.9066 n_steps=1 mean_tv=0.9066 max_tv=0.9066
+
+[code_generation row=11] CFE=0.0 delta_sum=1.8683 n_steps=7 mean_tv=0.2669 max_tv=0.9828
+
+[code_generation row=12] CFE=0.0 delta_sum=1.8805 n_steps=183 mean_tv=0.0103 max_tv=0.7906
+
+[code_generation row=13] CFE=0.0 delta_sum=1.7291 n_steps=14 mean_tv=0.1235 max_tv=0.3852
+
+[code_generation row=14] CFE=0.0 delta_sum=2.1805 n_steps=9 mean_tv=0.2423 max_tv=0.6367
+
+[code_generation row=15] CFE=0.0 delta_sum=1.8599 n_steps=5 mean_tv=0.3720 max_tv=0.8258
+
+[code_generation row=16] CFE=0.0 delta_sum=1.3180 n_steps=5 mean_tv=0.2636 max_tv=0.7905
+
+[code_generation row=17] CFE=0.0 delta_sum=0.0 (LCE==JCE, single pre-target call)
+
+[code_generation row=18] CFE=0.0 delta_sum=1.6784 n_steps=3 mean_tv=0.5595 max_tv=0.8759
+
+[code_generation row=19] CFE=0.0 delta_sum=1.6718 n_steps=6 mean_tv=0.2786 max_tv=0.9804
+
+[code_generation row=20] CFE=0.0 delta_sum=2.4097 n_steps=13 mean_tv=0.1854 max_tv=0.5676
+
+[code_generation row=24] CFE=0.0 delta_sum=0.4025 n_steps=5 mean_tv=0.0805 max_tv=0.3139
+
+[code_generation row=25] CFE=1.0 delta_sum=1.0468 n_steps=5 mean_tv=0.2094 max_tv=0.9999
+
+[code_generation row=26] CFE=0.0 delta_sum=1.9563 n_steps=12 mean_tv=0.1630 max_tv=0.5598
+
+[code_generation row=27] CFE=0.0 delta_sum=1.2863 n_steps=2 mean_tv=0.6431 max_tv=0.6764
+
+[code_generation row=28] CFE=-1.0 delta_sum=0.0 (LCE==JCE, single pre-target call)
+
+[code_generation row=29] CFE=0.0 delta_sum=1.3896 n_steps=4 mean_tv=0.3474 max_tv=0.8347
+
+[code_generation row=30] CFE=0.0 delta_sum=0.9680 n_steps=7 mean_tv=0.1383 max_tv=0.4082
+
+[code_generation row=31] CFE=0.0 delta_sum=1.9721 n_steps=10 mean_tv=0.1972 max_tv=0.8697
+
+[code_generation row=32] CFE=0.0 delta_sum=1.4304 n_steps=2 mean_tv=0.7152 max_tv=0.8095
+
+[code_generation row=33] CFE=0.0 delta_sum=1.0813 n_steps=7 mean_tv=0.1545 max_tv=0.8938
+
+[code_generation row=34] CFE=0.0 delta_sum=1.5400 n_steps=3 mean_tv=0.5133 max_tv=0.8764
+
+[code_generation row=35] CFE=0.0 delta_sum=0.9376 n_steps=1 mean_tv=0.9376 max_tv=0.9376
+
+[code_generation row=36] CFE=0.0 delta_sum=0.9028 n_steps=5 mean_tv=0.1806 max_tv=0.6972
+
+[code_generation row=37] CFE=0.0 delta_sum=1.6556 n_steps=7 mean_tv=0.2365 max_tv=0.7566
+
+[code_generation row=38] CFE=0.0 delta_sum=1.1742 n_steps=2 mean_tv=0.5871 max_tv=0.8295
+
+[code_generation row=39] CFE=0.0 delta_sum=1.5693 n_steps=2 mean_tv=0.7847 max_tv=0.8015
+
+[code_generation row=40] CFE=0.0 delta_sum=2.5612 n_steps=4 mean_tv=0.6403 max_tv=0.9781
+
+[code_generation row=41] CFE=0.0 delta_sum=0.9996 n_steps=1 mean_tv=0.9996 max_tv=0.9996
+
+[code_generation row=42] CFE=0.0 delta_sum=1.3683 n_steps=7 mean_tv=0.1955 max_tv=0.7097
+
+[code_generation row=43] CFE=0.0 delta_sum=1.7097 n_steps=2 mean_tv=0.8548 max_tv=0.9950
+
+[code_generation row=44] CFE=0.0 delta_sum=0.9569 n_steps=1 mean_tv=0.9569 max_tv=0.9569
+
+[code_generation row=45] CFE=0.0 delta_sum=1.9045 n_steps=5 mean_tv=0.3809 max_tv=0.9910
+
+[code_generation row=46] CFE=0.0 delta_sum=0.9119 n_steps=1 mean_tv=0.9119 max_tv=0.9119
+
+[code_generation row=47] CFE=0.0 delta_sum=1.2214 n_steps=2 mean_tv=0.6107 max_tv=0.9101
+
+[code_generation row=48] CFE=0.0 delta_sum=0.7873 n_steps=8 mean_tv=0.0984 max_tv=0.4378
+
+[code_generation row=49] CFE=0.0 delta_sum=0.9820 n_steps=1 mean_tv=0.9820 max_tv=0.9820
+
+[code_generation row=50] CFE=0.0 delta_sum=1.7453 n_steps=7 mean_tv=0.2493 max_tv=0.7620
+
+[code_generation row=51] CFE=0.0 delta_sum=1.5422 n_steps=3 mean_tv=0.5141 max_tv=0.9882
+
+[code_generation row=52] CFE=0.0 delta_sum=1.3562 n_steps=2 mean_tv=0.6781 max_tv=0.9995
+
+[code_generation row=53] CFE=0.0 delta_sum=1.2910 n_steps=8 mean_tv=0.1614 max_tv=0.6118
+
+[code_generation row=54] CFE=0.0 delta_sum=1.7448 n_steps=2 mean_tv=0.8724 max_tv=0.9680
+
+[financial_article_writing row=0] CFE=-1.0 delta_sum=1.5617 n_steps=5 mean_tv=0.3123 max_tv=0.8659
+
+[financial_article_writing row=1] CFE=0.0 delta_sum=1.1777 n_steps=7 mean_tv=0.1682 max_tv=0.9949
+
+[financial_article_writing row=2] CFE=0.0 delta_sum=3.6833 n_steps=21 mean_tv=0.1754 max_tv=0.9638
+
+[financial_article_writing row=3] CFE=-1.0 delta_sum=0.7995 n_steps=74 mean_tv=0.0108 max_tv=0.0603
+
+[financial_article_writing row=4] CFE=0.0 delta_sum=2.1081 n_steps=4 mean_tv=0.5270 max_tv=0.7189
+
+[financial_article_writing row=5] CFE=0.0 delta_sum=1.5921 n_steps=2 mean_tv=0.7961 max_tv=0.8539
+
+[financial_article_writing row=6] CFE=0.0 delta_sum=1.3706 n_steps=2 mean_tv=0.6853 max_tv=0.7324
+
+[financial_article_writing row=7] CFE=0.0 delta_sum=1.2698 n_steps=31 mean_tv=0.0410 max_tv=0.1458
+
+[financial_article_writing row=8] CFE=0.0 delta_sum=0.3545 n_steps=14 mean_tv=0.0253 max_tv=0.2328
+
+[financial_article_writing row=9] CFE=0.0 delta_sum=0.8723 n_steps=4 mean_tv=0.2181 max_tv=0.6866
+
+[financial_article_writing row=10] CFE=0.0 delta_sum=0.2616 n_steps=25 mean_tv=0.0105 max_tv=0.1221
+
+[financial_article_writing row=11] CFE=0.0 delta_sum=1.4002 n_steps=12 mean_tv=0.1167 max_tv=0.9934
+
+[financial_article_writing row=12] CFE=0.0 delta_sum=1.9857 n_steps=3 mean_tv=0.6619 max_tv=0.9842
+
+[financial_article_writing row=13] CFE=0.0 delta_sum=1.3162 n_steps=36 mean_tv=0.0366 max_tv=0.2521
+
+[financial_article_writing row=14] CFE=0.0 delta_sum=1.2408 n_steps=4 mean_tv=0.3102 max_tv=0.9265
+
+[financial_article_writing row=15] CFE=0.0 delta_sum=2.8644 n_steps=171 mean_tv=0.0168 max_tv=0.1699
+
+[financial_article_writing row=16] CFE=1.0 delta_sum=1.9875 n_steps=5 mean_tv=0.3975 max_tv=0.6683
+
+[financial_article_writing row=17] CFE=0.0 delta_sum=1.2478 n_steps=4 mean_tv=0.3119 max_tv=0.5181
+
+[financial_article_writing row=18] CFE=0.0 delta_sum=1.2383 n_steps=31 mean_tv=0.0399 max_tv=0.2536
+
+[financial_article_writing row=19] CFE=-1.0 delta_sum=1.0634 n_steps=4 mean_tv=0.2658 max_tv=0.6206
+
+[financial_article_writing row=20] CFE=0.0 delta_sum=0.7549 n_steps=37 mean_tv=0.0204 max_tv=0.1641
+
+[financial_article_writing row=21] CFE=0.0 delta_sum=1.1946 n_steps=7 mean_tv=0.1707 max_tv=0.9799
+
+[financial_article_writing row=22] CFE=0.0 delta_sum=0.8107 n_steps=5 mean_tv=0.1621 max_tv=0.3944
+
+[financial_article_writing row=23] CFE=0.0 delta_sum=3.2003 n_steps=31 mean_tv=0.1032 max_tv=0.5571
+
+[financial_article_writing row=24] CFE=0.0 delta_sum=2.7710 n_steps=25 mean_tv=0.1108 max_tv=0.4427
+
+[financial_article_writing row=25] CFE=0.0 delta_sum=1.6168 n_steps=4 mean_tv=0.4042 max_tv=0.8220
+
+[financial_article_writing row=26] CFE=0.0 delta_sum=1.8535 n_steps=6 mean_tv=0.3089 max_tv=0.8257
+
+[financial_article_writing row=27] CFE=0.0 delta_sum=1.6980 n_steps=7 mean_tv=0.2426 max_tv=0.9383
+
+[financial_article_writing row=28] CFE=0.0 delta_sum=0.8482 n_steps=2 mean_tv=0.4241 max_tv=0.7718
+
+[financial_article_writing row=29] CFE=0.0 delta_sum=2.9205 n_steps=161 mean_tv=0.0181 max_tv=0.1544
+
+[financial_article_writing row=30] CFE=0.0 delta_sum=1.4308 n_steps=4 mean_tv=0.3577 max_tv=0.5378
+
+[financial_article_writing row=31] CFE=-1.0 delta_sum=2.3234 n_steps=8 mean_tv=0.2904 max_tv=0.8544
+
+[financial_article_writing row=32] CFE=0.0 delta_sum=2.1206 n_steps=14 mean_tv=0.1515 max_tv=0.4215
+
+[financial_article_writing row=33] CFE=0.0 delta_sum=1.5356 n_steps=7 mean_tv=0.2194 max_tv=0.9898
+
+[financial_article_writing row=34] CFE=0.0 delta_sum=1.8503 n_steps=31 mean_tv=0.0597 max_tv=0.3643
+
+[financial_article_writing row=35] CFE=0.0 delta_sum=0.0 (LCE==JCE, single pre-target call)
+
+[financial_article_writing row=36] CFE=0.0 delta_sum=0.7973 n_steps=6 mean_tv=0.1329 max_tv=0.7242
+
+[financial_article_writing row=37] CFE=0.0 delta_sum=1.5026 n_steps=7 mean_tv=0.2147 max_tv=0.9967
+
+[financial_article_writing row=38] CFE=0.0 delta_sum=1.5868 n_steps=5 mean_tv=0.3174 max_tv=0.8013
+
+[financial_article_writing row=39] CFE=1.0 delta_sum=1.1354 n_steps=5 mean_tv=0.2271 max_tv=0.7500
+
+[financial_article_writing row=40] CFE=0.0 delta_sum=1.5868 n_steps=5 mean_tv=0.3174 max_tv=0.8013
+
+[financial_article_writing row=41] CFE=0.0 delta_sum=1.5868 n_steps=5 mean_tv=0.3174 max_tv=0.8013
+
+[financial_article_writing row=42] CFE=0.0 delta_sum=1.4316 n_steps=7 mean_tv=0.2045 max_tv=0.9775
+
+[financial_article_writing row=43] CFE=-1.0 delta_sum=2.6614 n_steps=115 mean_tv=0.0231 max_tv=0.2364
+
+[financial_article_writing row=44] CFE=1.0 delta_sum=1.5868 n_steps=5 mean_tv=0.3174 max_tv=0.8013
+
+[financial_article_writing row=45] CFE=0.0 delta_sum=1.5868 n_steps=5 mean_tv=0.3174 max_tv=0.8013
+
+[financial_article_writing row=46] CFE=-1.0 delta_sum=1.6338 n_steps=10 mean_tv=0.1634 max_tv=0.8814
+
+[financial_article_writing row=47] CFE=0.0 delta_sum=2.4906 n_steps=115 mean_tv=0.0217 max_tv=0.6634
+
+[financial_article_writing row=48] CFE=0.0 delta_sum=0.0 (LCE==JCE, single pre-target call)
+
+[financial_article_writing row=49] CFE=0.0 delta_sum=1.5191 n_steps=31 mean_tv=0.0490 max_tv=0.2699
+
+[financial_article_writing row=50] CFE=-1.0 delta_sum=1.6959 n_steps=8 mean_tv=0.2120 max_tv=0.9952
+
+[financial_article_writing row=51] CFE=0.0 delta_sum=1.3011 n_steps=3 mean_tv=0.4337 max_tv=0.8241
+
+[financial_article_writing row=52] CFE=0.0 delta_sum=2.9044 n_steps=153 mean_tv=0.0190 max_tv=0.1563
+
+[financial_article_writing row=53] CFE=0.0 delta_sum=1.8095 n_steps=25 mean_tv=0.0724 max_tv=0.5903
+
+[financial_article_writing row=54] CFE=-1.0 delta_sum=0.6504 n_steps=31 mean_tv=0.0210 max_tv=0.1288
+
+[financial_article_writing row=55] CFE=0.0 delta_sum=0.8565 n_steps=4 mean_tv=0.2141 max_tv=0.4190
+
+[financial_article_writing row=56] CFE=-1.0 delta_sum=1.2276 n_steps=5 mean_tv=0.2455 max_tv=0.5420
+
+[financial_article_writing row=57] CFE=0.0 delta_sum=1.5617 n_steps=5 mean_tv=0.3123 max_tv=0.8659
+
+[financial_article_writing row=58] CFE=0.0 delta_sum=1.5393 n_steps=25 mean_tv=0.0616 max_tv=0.4215
+
+[financial_article_writing row=59] CFE=-1.0 delta_sum=1.3611 n_steps=4 mean_tv=0.3403 max_tv=0.9528
+
+[financial_article_writing row=60] CFE=-1.0 delta_sum=0.9241 n_steps=31 mean_tv=0.0298 max_tv=0.2702
+
+[financial_article_writing row=61] CFE=0.0 delta_sum=1.2160 n_steps=13 mean_tv=0.0935 max_tv=0.8756
+
+[financial_article_writing row=62] CFE=0.0 delta_sum=1.3856 n_steps=7 mean_tv=0.1979 max_tv=0.9971
+
+[financial_article_writing row=63] CFE=0.0 delta_sum=3.5593 n_steps=18 mean_tv=0.1977 max_tv=0.4580
+
+[financial_article_writing row=64] CFE=0.0 delta_sum=1.5617 n_steps=5 mean_tv=0.3123 max_tv=0.8659
+
+[financial_article_writing row=65] CFE=0.0 delta_sum=1.5587 n_steps=8 mean_tv=0.1948 max_tv=0.3944
+
+[multi_agent_debate row=0] CFE=0.0 delta_sum=2.4974 n_steps=5 mean_tv=0.4995 max_tv=0.9951
+
+[multi_agent_debate row=1] CFE=0.0 delta_sum=1.9478 n_steps=5 mean_tv=0.3896 max_tv=0.9889
+
+[multi_agent_debate row=2] CFE=0.0 delta_sum=1.1043 n_steps=5 mean_tv=0.2209 max_tv=0.3301
+
+[multi_agent_debate row=3] CFE=0.0 delta_sum=1.3330 n_steps=5 mean_tv=0.2666 max_tv=0.5321
+
+[multi_agent_debate row=4] CFE=0.0 delta_sum=2.4925 n_steps=5 mean_tv=0.4985 max_tv=0.9938
+
+[multi_agent_debate row=5] CFE=0.0 delta_sum=1.4485 n_steps=2 mean_tv=0.7242 max_tv=0.7619
+
+[multi_agent_debate row=6] CFE=0.0 delta_sum=2.1095 n_steps=5 mean_tv=0.4219 max_tv=0.9973
+
+[multi_agent_debate row=7] CFE=0.0 delta_sum=1.3761 n_steps=2 mean_tv=0.6880 max_tv=0.8153
+
+[multi_agent_debate row=8] CFE=0.0 delta_sum=1.3379 n_steps=2 mean_tv=0.6689 max_tv=0.7300
+
+[multi_agent_debate row=9] CFE=0.0 delta_sum=1.2280 n_steps=5 mean_tv=0.2456 max_tv=0.5755
+
+[multi_agent_debate row=10] CFE=0.0 delta_sum=1.7983 n_steps=5 mean_tv=0.3597 max_tv=0.6674
+
+[multi_agent_debate row=11] CFE=0.0 delta_sum=2.1231 n_steps=6 mean_tv=0.3538 max_tv=0.8602
+
+[multi_agent_debate row=12] CFE=0.0 delta_sum=1.1662 n_steps=2 mean_tv=0.5831 max_tv=0.6821
+
+[multi_agent_debate row=13] CFE=0.0 delta_sum=1.1004 n_steps=4 mean_tv=0.2751 max_tv=0.5220
+
+[multi_agent_debate row=14] CFE=0.0 delta_sum=1.7112 n_steps=5 mean_tv=0.3422 max_tv=0.9982
+
+[multi_agent_debate row=15] CFE=0.0 delta_sum=1.6174 n_steps=4 mean_tv=0.4043 max_tv=0.6488
+
+[multi_agent_debate row=16] CFE=0.0 delta_sum=2.3801 n_steps=5 mean_tv=0.4760 max_tv=0.9955
+
+[multi_agent_debate row=17] CFE=0.0 delta_sum=0.9664 n_steps=25 mean_tv=0.0387 max_tv=0.3176
+
+[travel_planning row=0] CFE=0.0 delta_sum=1.6131 n_steps=4 mean_tv=0.4033 max_tv=0.6175
+
+[travel_planning row=1] CFE=0.0 delta_sum=0.0 (LCE==JCE, single pre-target call)
+
+[travel_planning row=2] CFE=0.0 delta_sum=1.1457 n_steps=7 mean_tv=0.1637 max_tv=0.8615
+
+[travel_planning row=3] CFE=-1.0 delta_sum=0.6545 n_steps=5 mean_tv=0.1309 max_tv=0.3687
+
+[travel_planning row=4] CFE=0.0 delta_sum=0.0 (LCE==JCE, single pre-target call)
+
+[travel_planning row=5] CFE=0.0 delta_sum=1.3450 n_steps=8 mean_tv=0.1681 max_tv=0.7076
+
+[travel_planning row=6] CFE=0.0 delta_sum=0.1671 n_steps=256 mean_tv=0.0007 max_tv=0.0975
+
+[travel_planning row=7] CFE=0.0 delta_sum=0.0 (LCE==JCE, single pre-target call)
+
+[travel_planning row=8] CFE=0.0 delta_sum=1.7939 n_steps=3 mean_tv=0.5980 max_tv=0.8384
+
+[travel_planning row=9] CFE=0.0 delta_sum=0.0 (LCE==JCE, single pre-target call)
+
+[travel_planning row=10] CFE=0.0 delta_sum=1.7193 n_steps=8 mean_tv=0.2149 max_tv=0.5159
+
+[travel_planning row=11] CFE=0.0 delta_sum=0.9987 n_steps=4 mean_tv=0.2497 max_tv=0.4325
+
+[travel_planning row=12] CFE=0.0 delta_sum=2.2029 n_steps=5 mean_tv=0.4406 max_tv=0.7135
+
+[travel_planning row=13] CFE=0.0 delta_sum=0.8727 n_steps=4 mean_tv=0.2182 max_tv=0.5300
+
+[travel_planning row=14] CFE=0.0 delta_sum=0.0 (LCE==JCE, single pre-target call)
+
+[travel_planning row=15] CFE=0.0 delta_sum=0.0 (LCE==JCE, single pre-target call)
+
+[travel_planning row=16] CFE=0.0 delta_sum=1.3251 n_steps=5 mean_tv=0.2650 max_tv=0.6206
+
+[travel_planning row=17] CFE=0.0 delta_sum=2.3488 n_steps=11 mean_tv=0.2135 max_tv=0.9308
+
+[travel_planning row=18] CFE=0.0 delta_sum=0.0 (LCE==JCE, single pre-target call)
+
+[travel_planning row=19] CFE=0.0 delta_sum=0.0 (LCE==JCE, single pre-target call)
+
+[travel_planning row=20] CFE=0.0 delta_sum=1.4781 n_steps=5 mean_tv=0.2956 max_tv=0.3962
+
+[travel_planning row=22] CFE=-1.0 delta_sum=1.1627 n_steps=8 mean_tv=0.1453 max_tv=0.4983
+
+[travel_planning row=23] CFE=1.0 delta_sum=0.0 (LCE==JCE, single pre-target call)
+
+[travel_planning row=24] CFE=0.0 delta_sum=0.0 (LCE==JCE, single pre-target call)
+
+[travel_planning row=25] CFE=-1.0 delta_sum=0.8049 n_steps=2 mean_tv=0.4024 max_tv=0.6895
+
+[travel_planning row=26] CFE=0.0 delta_sum=1.8944 n_steps=7 mean_tv=0.2706 max_tv=0.9300
+
+[travel_planning row=27] CFE=0.0 delta_sum=1.1840 n_steps=5 mean_tv=0.2368 max_tv=0.9525
+
+[travel_planning row=30] CFE=1.0 delta_sum=0.0 (LCE==JCE, single pre-target call)
+
+[travel_planning row=31] CFE=0.0 delta_sum=0.0 (LCE==JCE, single pre-target call)
+
+[travel_planning row=32] CFE=0.0 delta_sum=1.4759 n_steps=4 mean_tv=0.3690 max_tv=0.5232
+
+[travel_planning row=36] CFE=0.0 delta_sum=4.1735 n_steps=57 mean_tv=0.0732 max_tv=0.6880
+
+[travel_planning row=37] CFE=0.0 delta_sum=1.3020 n_steps=2 mean_tv=0.6510 max_tv=0.7078
+
+[travel_planning row=38] CFE=0.0 delta_sum=2.2323 n_steps=5 mean_tv=0.4465 max_tv=0.7954
+
+[travel_planning row=39] CFE=0.0 delta_sum=1.0880 n_steps=8 mean_tv=0.1360 max_tv=0.5252
+
+[travel_planning row=40] CFE=0.0 delta_sum=0.9975 n_steps=3 mean_tv=0.3325 max_tv=0.9970
+
+[travel_planning row=41] CFE=0.0 delta_sum=1.1653 n_steps=5 mean_tv=0.2331 max_tv=0.7311
+
+[travel_planning row=42] CFE=0.0 delta_sum=0.9365 n_steps=7 mean_tv=0.1338 max_tv=0.4892
+
+[travel_planning row=43] CFE=-1.0 delta_sum=0.0 (LCE==JCE, single pre-target call)
+
+[travel_planning row=47] CFE=0.0 delta_sum=1.1526 n_steps=2 mean_tv=0.5763 max_tv=0.6328
+
+[travel_planning row=48] CFE=-1.0 delta_sum=1.1912 n_steps=12 mean_tv=0.0993 max_tv=0.3308
+
+Saved -> outputsALL/delta_estimates_v3.csv
+
+Mean delta_sum (upper bound on E[|IE_beta|]): 1.3894
+Max delta_sum: 4.1735
+Rows with LCE==JCE (delta=0 by construction): 17
+
+By environment:
+                           delta_sum    n_steps   mean_tv
+environment                                              
+code_generation             1.419881   8.461538  0.415072
+financial_article_writing   1.553688  22.333333  0.208369
+multi_agent_debate          1.652110   5.388889  0.414260
+travel_planning             0.960645  11.300000  0.186698

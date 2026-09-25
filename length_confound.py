@@ -22,6 +22,8 @@ Usage:
         --baseline-root results_v2_qwen_baseline \
         --per-row outputs/per_row.csv \
         --output-dir outputs/
+
+    Add --model-id meta-llama/Meta-Llama-3.1-8B-Instruct (and the llama roots/outputs) for Llama.
 """
 
 import json
@@ -47,13 +49,13 @@ def safe_model_name(model_id="Qwen/Qwen3-8B"):
     return model_id.split("/")[-1]
 
 
-def get_factual_message_length(baseline_root, environment, safe, row_id):
+def get_factual_message_length(baseline_root, environment, safe, row_id, model_id="Qwen/Qwen3-8B"):
     """
     Extract the character length of the CF agent's factual message at k*
     directly from the intervention dict stored in index.json under
     'factual_response_text'.
     """
-    model_name = safe_model_name()
+    model_name = safe_model_name(model_id)
     adv = ADV_AGENTS[environment]
     safe_suffix = "/safe=True" if safe else ""
     row_dir = (Path(baseline_root) / f"env={environment}" / f"model={model_name}"
@@ -83,6 +85,8 @@ if __name__ == "__main__":
     parser.add_argument("--baseline-root", default="results_v2_qwen_baseline")
     parser.add_argument("--per-row", default="outputs/per_row.csv")
     parser.add_argument("--output-dir", default="outputs/")
+    parser.add_argument("--model-id", default="Qwen/Qwen3-8B",
+                        help="HF model id (or results folder name) used for the model=<name> directory.")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -105,7 +109,8 @@ if __name__ == "__main__":
             args.baseline_root,
             row["environment"],
             row["safe"],
-            int(row["row_id"])
+            int(row["row_id"]),
+            args.model_id,
         )
         lengths.append(length)
 

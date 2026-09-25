@@ -1,0 +1,30 @@
+Loading Qwen/Qwen3-8B on cuda:0...
+Loading checkpoint shards:   0%|          | 0/5 [00:00<?, ?it/s]Loading checkpoint shards:  20%|██        | 1/5 [00:01<00:05,  1.40s/it]Loading checkpoint shards:  40%|████      | 2/5 [00:02<00:04,  1.39s/it]Loading checkpoint shards:  60%|██████    | 3/5 [00:04<00:02,  1.39s/it]Loading checkpoint shards:  80%|████████  | 4/5 [00:05<00:01,  1.30s/it]Loading checkpoint shards: 100%|██████████| 5/5 [00:05<00:00,  1.01it/s]Loading checkpoint shards: 100%|██████████| 5/5 [00:05<00:00,  1.16s/it]
+Model loaded.
+
+[travel_planning row=0] CFE=0.0 n_down=123 sum_delta=121.2933 mean_delta=0.9861 max_delta=1.0000
+
+[travel_planning row=1] CFE=0.0 n_down=759 sum_delta=0.0000 mean_delta=0.0000 max_delta=0.0000
+
+[travel_planning row=2] CFE=0.0 n_down=313 sum_delta=308.9456 mean_delta=0.9870 max_delta=1.0000
+
+[travel_planning row=3] CFE=-1.0 n_down=333 sum_delta=330.8739 mean_delta=0.9936 max_delta=1.0000
+
+[travel_planning row=4] CFE=0.0 n_down=487 sum_delta=0.0000 mean_delta=0.0000 max_delta=0.0000
+
+[travel_planning row=5] CFE=0.0 n_down=424 sum_delta=416.5367 mean_delta=0.9824 max_delta=1.0000
+
+[travel_planning row=6] CFE=0.0 n_down=562 sum_delta=557.4890 mean_delta=0.9920 max_delta=1.0000
+
+[travel_planning row=7] CFE=0.0 n_down=347 sum_delta=0.0000 mean_delta=0.0000 max_delta=0.0000
+
+[travel_planning row=8] CFE=0.0 n_down=330 sum_delta=326.9616 mean_delta=0.9908 max_delta=1.0000
+
+[travel_planning row=9] CFE=0.0 n_down=434 sum_delta=0.0000 mean_delta=0.0000 max_delta=0.0000
+
+Saved -> outputsALL/delta_estimates.csv
+
+-- Summary --
+                 n_rows  mean_delta_sum  mean_delta_mean  mean_delta_max
+environment                                                             
+travel_planning      10      206.210014         0.593195             0.6

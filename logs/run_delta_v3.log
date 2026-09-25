@@ -1,0 +1,34 @@
+Loading Qwen/Qwen3-8B on cuda:0...
+Loading checkpoint shards:   0%|          | 0/5 [00:00<?, ?it/s]Loading checkpoint shards:  20%|██        | 1/5 [00:01<00:04,  1.17s/it]Loading checkpoint shards:  40%|████      | 2/5 [00:02<00:03,  1.16s/it]Loading checkpoint shards:  60%|██████    | 3/5 [00:03<00:02,  1.18s/it]Loading checkpoint shards:  80%|████████  | 4/5 [00:04<00:01,  1.10s/it]Loading checkpoint shards: 100%|██████████| 5/5 [00:04<00:00,  1.20it/s]Loading checkpoint shards: 100%|██████████| 5/5 [00:04<00:00,  1.03it/s]
+Model loaded.
+
+[travel_planning row=0] CFE=0.0 delta_sum=1.6131 n_steps=4 mean_tv=0.4033 max_tv=0.6175
+
+[travel_planning row=1] CFE=0.0 delta_sum=0.0 (LCE==JCE, single pre-target call)
+
+[travel_planning row=2] CFE=0.0 delta_sum=1.1457 n_steps=7 mean_tv=0.1637 max_tv=0.8615
+
+[travel_planning row=3] CFE=-1.0 delta_sum=0.6545 n_steps=5 mean_tv=0.1309 max_tv=0.3687
+
+[travel_planning row=4] CFE=0.0 delta_sum=0.0 (LCE==JCE, single pre-target call)
+
+[travel_planning row=5] CFE=0.0 delta_sum=1.3450 n_steps=8 mean_tv=0.1681 max_tv=0.7076
+
+[travel_planning row=6] CFE=0.0 delta_sum=0.1671 n_steps=256 mean_tv=0.0007 max_tv=0.0975
+
+[travel_planning row=7] CFE=0.0 delta_sum=0.0 (LCE==JCE, single pre-target call)
+
+[travel_planning row=8] CFE=0.0 delta_sum=1.7939 n_steps=3 mean_tv=0.5980 max_tv=0.8384
+
+[travel_planning row=9] CFE=0.0 delta_sum=0.0 (LCE==JCE, single pre-target call)
+
+Saved -> outputsALL/delta_estimates_v3.csv
+
+Mean delta_sum (upper bound on E[|IE_beta|]): 0.6719
+Max delta_sum: 1.7939
+Rows with LCE==JCE (delta=0 by construction): 4
+
+By environment:
+                 delta_sum  n_steps   mean_tv
+environment                                  
+travel_planning   0.671932     28.3  0.146459
