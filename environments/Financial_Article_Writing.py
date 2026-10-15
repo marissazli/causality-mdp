@@ -7,14 +7,18 @@ from autogen_ext.models.ollama import OllamaChatCompletionClient
 from autogen_ext.code_executors.docker import DockerCommandLineCodeExecutor
 from autogen_core.models import UserMessage
 from autogen_core.tools import FunctionTool
-import random
+import hashlib
 import re
 import asyncio
 from environments.Core_Environment import Core_Environment
 
 async def generate_image(prompt : str) -> str:
     "generate an image using the provided prompt. Returns a unique id that can be used in the article"
-    return f"IMAGE_{random.randint(int(1e5), int(1e6))}:[{prompt}]"
+    # ID is a hash of the prompt, not random.randint: unseeded Python randomness isn't
+    # on the Gumbel tape, so factual and counterfactual runs got different IDs and
+    # diverged right after the image call even with identical prompts.
+    image_id = int(hashlib.sha256(prompt.encode("utf-8")).hexdigest(), 16) % 900000 + 100000
+    return f"IMAGE_{image_id}:[{prompt}]"
 
 class Financial_Article_Writing(Core_Environment):
     @staticmethod

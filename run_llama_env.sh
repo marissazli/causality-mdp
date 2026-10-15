@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
-# Llama-3.1-8B-Instruct baseline run with the same settings as the Qwen baseline runs.
+# Llama-3.1-8B-Instruct run with the same settings as the Qwen runs.
 # Usage: bash run_llama_env.sh <tp|mad|cg|faw> [safe] [extra args, e.g. --start-id 12]
+# Replay instead of baseline: CF_MODE=replay bash run_llama_env.sh <env> [safe]
+#   (writes to results_v2_llama_replay, logs as run_llama_<env>[_safe]_replay.log)
 set -euo pipefail
 cd "$(dirname "$0")"
 source .venv/bin/activate
-mkdir -p logs results_v2_llama_baseline
+CF_MODE=${CF_MODE:-baseline}
+[[ "$CF_MODE" == baseline || "$CF_MODE" == replay ]] || { echo "CF_MODE must be baseline or replay"; exit 1; }
+OUTPUT_ROOT=results_v2_llama_${CF_MODE}
+LOG_SUFFIX=$([[ "$CF_MODE" == replay ]] && echo _replay || true)
+mkdir -p logs "$OUTPUT_ROOT"
 
 ENV_KEY="${1:?usage: run_llama_env.sh <tp|mad|cg|faw> [safe] [extra args]}"
 shift
@@ -18,10 +24,10 @@ case "$ENV_KEY" in
 esac
 
 SAFE_FLAG=()
-LOG=logs/run_llama_${ENV_KEY}.log
+LOG=logs/run_llama_${ENV_KEY}${LOG_SUFFIX}.log
 if [[ "${1:-}" == "safe" ]]; then
     SAFE_FLAG=(--safe)
-    LOG=logs/run_llama_${ENV_KEY}_safe.log
+    LOG=logs/run_llama_${ENV_KEY}_safe${LOG_SUFFIX}.log
     shift
 fi
 
@@ -33,10 +39,10 @@ CUDA_VISIBLE_DEVICES=${GPU:-1} python run_experiments_v2.py \
     --adversarial-agent "$ADV" \
     --cf-agent "$CF_AGENT" \
     --cf-selection-rule last_pre_target_agent \
-    --cf-mode baseline \
+    --cf-mode "$CF_MODE" \
     --cf-samples 1 \
     --export-tape \
     --max-new-tokens "$MAX_TOKENS" \
     "${SAFE_FLAG[@]}" \
-    --output-root results_v2_llama_baseline \
+    --output-root "$OUTPUT_ROOT" \
     "$@" 2>&1 | tee "$LOG"
