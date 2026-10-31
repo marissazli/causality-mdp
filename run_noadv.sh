@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# No-adversary reference: every row's episode with all agents benign (the
+# adversary slot keeps the environment's own agent), factual run only, same
+# seeds and settings as the main runs. Evaluated against each row's target action
+# it gives the rate of the harmful outcome without any attack.
+# KV_CACHE=1 for a faster run with v3 cached numerics (episodes are unpaired anyway).
+#
+# Usage: bash run_noadv.sh <qwen|llama> <tp|mad|cg|faw> [safe] [extra args, e.g. --start-id 12]
+# GPU defaults to 1; GPU=0 to override.
+set -euo pipefail
+cd "$(dirname "$0")"
+source .venv/bin/activate
+
+MODEL_KEY=${1:?usage: run_noadv.sh <qwen|llama> <tp|mad|cg|faw> [safe] [extra args]}
+ENV_KEY=${2:?missing environment key (tp, mad, cg, faw)}
+shift 2
+case "$MODEL_KEY" in
+    # Qwen runs used the default float16; Llama runs used bfloat16
+    qwen)  MODEL_ID=Qwen/Qwen3-8B;                         DTYPE=float16 ;;
+    llama) MODEL_ID=meta-llama/Meta-Llama-3.1-8B-Instruct; DTYPE=bfloat16 ;;
+    *) echo "model must be qwen or llama"; exit 1 ;;
+esac
+# max-new-tokens: 256 everywhere except FAW (512), as in the main runs
+case "$ENV_KEY" in
+    tp)  ENVIRONMENT=travel_planning;           ADV=PLANNER_AGENT; CF_AGENT=PLANNER_AGENT; MAX_TOKENS=256 ;;
+    mad) ENVIRONMENT=multi_agent_debate;        ADV=agent_4;       CF_AGENT=agent_0;       MAX_TOKENS=256 ;;
+    cg)  ENVIRONMENT=code_generation;           ADV=CEO;           CF_AGENT=CEO;           MAX_TOKENS=256 ;;
+    faw) ENVIRONMENT=financial_article_writing; ADV=CHIEF_EDITOR;  CF_AGENT=RESEARCHER;    MAX_TOKENS=512 ;;
+    *) echo "unknown environment key: $ENV_KEY (use tp, mad, cg, faw)"; exit 1 ;;
+esac
+
+SAFE_FLAG=()
+LOG=logs/run_noadv_${MODEL_KEY}_${ENV_KEY}.log
+if [[ "${1:-}" == "safe" ]]; then
+    SAFE_FLAG=(--safe)
+    LOG=logs/run_noadv_${MODEL_KEY}_${ENV_KEY}_safe.log
+    shift
+fi
+OUTPUT_ROOT=${OUTPUT_ROOT:-results_v3_${MODEL_KEY}_noadv}
+KV_FLAG=(--no-kv-cache); [[ "${KV_CACHE:-0}" == 1 ]] && KV_FLAG=()
+mkdir -p logs "$OUTPUT_ROOT"
+
+CUDA_VISIBLE_DEVICES=${GPU:-1} python run_experiments_v3.py \
+    --backend hf \
+    --hf-model-id "$MODEL_ID" \
+    --hf-dtype "$DTYPE" \
+    "${KV_FLAG[@]}" \
+    --environment "$ENVIRONMENT" \
+    --adversarial-agent "$ADV" \
+    --no-adversary \
+    --max-new-tokens "$MAX_TOKENS" \
+    "${SAFE_FLAG[@]}" \
+    --output-root "$OUTPUT_ROOT" \
+    "$@" 2>&1 | tee -a "$LOG"

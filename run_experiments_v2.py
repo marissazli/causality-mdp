@@ -763,7 +763,7 @@ def _make_environment(name: str, model_client: Any, safe: bool):
     if name == "financial_article_writing":
         return Financial_Article_Writing(model_client, safe=safe)
     if name == "code_generation":
-        return CodeGeneration(model_client)
+        return CodeGeneration(model_client, safe=safe)
     if name == "multi_agent_debate":
         return MultiAgentDebate(model_client, safe=safe)
     raise ValueError(f"Unknown environment: {name}")

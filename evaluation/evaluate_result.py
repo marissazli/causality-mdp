@@ -215,6 +215,9 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--baseline-root", type=str, default="results_v2_qwen_baseline")
     parser.add_argument("--replay-root", type=str, default="results_v2_qwen_replay")
+    parser.add_argument("--benign-root", type=str, default=None,
+                        help="Optional results root from run_experiments_v3.py --cf-mode benign; "
+                             "added as cf_mode=benign in ase.csv / per_row.csv.")
     parser.add_argument("--dataset", type=str, default="datasets/BAD-ACTS.csv")
     parser.add_argument("--model-id", type=str, default="Qwen/Qwen3-8B",
                         help="HF model id (or results folder name) used for the model=<name> directory.")
@@ -229,8 +232,10 @@ if __name__ == "__main__":
         eval_fn = EVAL_FNS[environment]
         print(f"\n=== {environment} ===")
         for safe in [False, True]:
-            for cf_mode, root in [("baseline", args.baseline_root),
-                                   ("replay", args.replay_root)]:
+            modes = [("baseline", args.baseline_root), ("replay", args.replay_root)]
+            if args.benign_root:
+                modes.append(("benign", args.benign_root))
+            for cf_mode, root in modes:
                 rows = scan_results_root(root, environment, safe, cf_mode, eval_fn, args.model_id)
                 label = f"safe={safe} mode={cf_mode}"
                 if rows:
