@@ -1,0 +1,4 @@
+PASS	T1 brute force (V=50, 100 pairs)	max abs err 6.66e-16
+PASS	T2 known value	gamma 0.300000000000000, delta 0.250000000000000
+PASS	T3 identity	gamma 0.0e+00, delta 0.0e+00
+PASS	T4 Monte Carlo (V=1000, 1e6 draws)	gamma 0.77504, empirical 0.77451, 3SE 0.00125

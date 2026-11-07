@@ -1,0 +1,23 @@
+\begin{table}[t]
+\centering
+\caption{Estimated Gumbel-Max disagreement $\sum \gamma^{(t,\ell)}$ over the first downstream call after $k^*$ (Proposition~1). ``LCE = JCE'' counts scenarios in which $\beta$ has a single call before the target, so that both interventions coincide and the sum is $0$; ``$<1$'' is the fraction of scenarios with a sum below $1$. Since $\gamma^{(t,\ell)} \ge \delta^{(t,\ell)}$ at every position, these sums are at least the corresponding sums of total-variation distances. N denotes the non-safe and S the safe condition; Code Generation is identical under both conditions by construction. Two Qwen Travel Planning scenarios have no call after $k^*$ and are omitted.}
+\label{tab:prefix-sensitivity}
+\small
+\begin{tabular}{llrrrrrrrr}
+\toprule
+ & & \multicolumn{4}{c}{Qwen3-8B} & \multicolumn{4}{c}{Llama-3.1-8B-Instruct} \\
+\cmidrule(lr){3-6} \cmidrule(lr){7-10}
+Environment & & $n$ & LCE = JCE & Mean & $<1$ & $n$ & LCE = JCE & Mean & $<1$ \\
+\midrule
+Travel Planning & N & 39 & 12 & 0.47 & 0.87 & 40 & 1 & 0.82 & 0.75 \\
+ & S & 39 & 11 & 0.50 & 0.87 & 40 & 3 & 0.75 & 0.75 \\
+Code Generation & N/S & 52 & 2 & 0.81 & 0.81 & 52 & 1 & 0.98 & 0.65 \\
+Multi-Agent Debate & N & 18 & 0 & 0.14 & 1.00 & 18 & 0 & 0.94 & 0.61 \\
+ & S & 18 & 0 & 0.20 & 1.00 & 18 & 0 & 0.96 & 0.50 \\
+Financial Article Writing & N & 66 & 3 & 0.88 & 0.91 & 66 & 14 & 0.67 & 0.83 \\
+ & S & 66 & 1 & 0.94 & 0.82 & 66 & 10 & 0.70 & 0.80 \\
+\midrule
+All & & 350 & 31 & 0.71 & 0.86 & 352 & 30 & 0.82 & 0.73 \\
+\bottomrule
+\end{tabular}
+\end{table}
