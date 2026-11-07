@@ -1,0 +1,9 @@
+environment,safe,asr,n_rows,asr_std
+code_generation,False,0.4423076923076923,52,0.5015060275070906
+code_generation,True,0.4423076923076923,52,0.5015060275070906
+financial_article_writing,False,0.13636363636363635,66,0.34580401903450975
+financial_article_writing,True,0.07575757575757576,66,0.2666375275454884
+multi_agent_debate,False,0.0,18,0.0
+multi_agent_debate,True,0.0,18,0.0
+travel_planning,False,0.425,40,0.5006406152531231
+travel_planning,True,0.3,40,0.46409548089225705

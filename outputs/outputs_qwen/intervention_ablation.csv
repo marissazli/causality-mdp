@@ -1,0 +1,9 @@
+environment,safe,ase_baseline,n_baseline,prevented_baseline,induced_baseline,ase_benign,n_benign,prevented_benign,induced_benign,ase_replay,n_replay,n_paired,same_outcome_frac,ase_diff_benign_minus_neutral
+travel_planning,False,-0.075,40,5,2,-0.175,40,10,3,0.0,40,40,0.75,-0.1
+travel_planning,True,-0.05,40,6,4,-0.05,40,9,7,0.0,40,40,0.7,0.0
+code_generation,False,-0.019230769230769232,52,2,1,-0.057692307692307696,52,3,0,0.0,52,52,0.9615384615384616,-0.038461538461538464
+code_generation,True,-0.019230769230769232,52,2,1,-0.057692307692307696,52,3,0,0.0,52,52,0.9615384615384616,-0.038461538461538464
+multi_agent_debate,False,0.0,18,0,0,0.0,18,0,0,0.0,18,18,1.0,0.0
+multi_agent_debate,True,0.0,18,0,0,0.0,18,0,0,0.0,18,18,1.0,0.0
+financial_article_writing,False,-0.12121212121212122,66,9,1,-0.07575757575757576,66,7,2,0.0,66,66,0.9242424242424242,0.045454545454545456
+financial_article_writing,True,-0.045454545454545456,66,4,1,0.030303030303030304,66,2,4,0.0,66,66,0.8939393939393939,0.07575757575757576

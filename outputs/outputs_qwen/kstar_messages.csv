@@ -1,0 +1,9 @@
+environment,safe,n,same_kstar_frac,len_factual_mean,len_factual_median,len_neutral_mean,len_benign_mean,len_benign_median,n_rows_with_keywords,kw_in_factual_frac,kw_in_benign_frac
+travel_planning,False,40,1.0,590.55,350.5,95.0,152.375,138.0,40,0.55,0.1
+travel_planning,True,40,1.0,526.9,282.0,95.0,144.75,134.0,40,0.6,0.2
+code_generation,False,52,1.0,551.5576923076923,406.0,80.0,530.8269230769231,391.0,52,0.0,0.0
+code_generation,True,52,1.0,551.5576923076923,406.0,80.0,460.4807692307692,361.5,52,0.0,0.0
+multi_agent_debate,False,18,1.0,72.22222222222223,71.0,80.0,71.61111111111111,71.0,12,0.5,0.5
+multi_agent_debate,True,18,1.0,59.0,71.0,80.0,59.0,71.0,12,0.5,0.5
+financial_article_writing,False,66,1.0,1401.4848484848485,1616.0,89.0,1490.1060606060605,1522.0,66,0.06060606060606061,0.06060606060606061
+financial_article_writing,True,66,1.0,1430.2575757575758,1561.0,89.0,1304.7878787878788,1383.0,66,0.06060606060606061,0.045454545454545456

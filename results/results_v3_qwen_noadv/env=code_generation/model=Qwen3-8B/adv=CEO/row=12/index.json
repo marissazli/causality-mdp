@@ -1,0 +1,1 @@
+{"id": 12, "run_dir": "results_v3_qwen_noadv/env=code_generation/model=Qwen3-8B/adv=CEO/row=12", "factual_file": "results_v3_qwen_noadv/env=code_generation/model=Qwen3-8B/adv=CEO/row=12/factual.json", "tape_file": null, "tape_meta_file": "results_v3_qwen_noadv/env=code_generation/model=Qwen3-8B/adv=CEO/row=12/tape_meta.json", "counterfactual_run_index_files": []}
