@@ -1,94 +1,198 @@
-# BAD-ACTS Benchmark
+# Youdunit: Single-Call Counterfactual Necessity in Multi-Agent LLM Systems
 
-## Introduction
+Code for the paper *Youdunit: Single-Call Counterfactual Necessity in Multi-Agent LLM Systems*.
 
-BAD-ACTS (Benchmark of ADversarial ACTionS) is a comprehensive benchmark designed to evaluate the robustness of agentic systems against adversarial manipulation that may result in harmful or undesirable behavior. Introduced in the paper *"Benchmarking the Robustness of Agentic Systems to Adversarially-Induced Harmful Actions,"* BAD-ACTS provides a structured framework for analyzing how susceptible different types of agentic systems are to adversarial influence.
+Given a multi-agent LLM conversation that ended in a harmful tool call, we ask whether one specific
+agent call was necessary for the harm: if the message of that call had been different, holding all
+other randomness fixed, would the harm still have happened? We answer this with the **Gumbel-Max
+tape**. During the factual run, the GPU random number generator state is recorded before every
+sampled token, on one tape shared by all agents. A counterfactual run replays the tape for every call
+except the intervened call k\*, whose message is replaced and whose tape span is skipped. Factual and
+counterfactual trajectories therefore differ only in k\* and its causal descendants, and the
+per-scenario counterfactual effect is `CFE = y_cf - y_factual` in {-1, 0, +1}.
 
-This repository includes the complete BAD-ACTS benchmark suite, featuring four distinct environments—Travel Planner, Financial Article Writing, Code Generation, and Multi-Agent Debate. It also contains a dataset of adversarial actions, implementations of adversarial and defensive agents, and scripts for reproducing the experiments described in the paper.
+Experiments use the [BAD-ACTS](#acknowledgement) benchmark (four multi-agent environments, 188
+adversarial scenarios) with Qwen3-8B and Llama-3.1-8B-Instruct on the HuggingFace `transformers`
+backend.
 
-## Contents
+## Repository layout
 
-* `environments/` — Source code for the four benchmark environments
-* `dataset/BAD-ACTS.csv` — Dataset of harmful actions
-* `agents/` — Implementations of adversarial and defensive agents
-* `evaluation/` — Evaluation functions tailored to each environment
-* `run_experiments.py` — Script for running individual experiments
-* `scripts/` — Utilities for executing full-scale experiments across agents, models, and environments
+```
+run_experiments_v2.py     paired factual + counterfactual runs (main results: neutral text and replay)
+run_experiments_v3.py     v2 plus: benign agent intervention, runs without an adversary, reuse of
+                          existing factual runs (--factual-root), optional KV cache and prefix skip
+environments/             the four BAD-ACTS environments (Travel Planning, Financial Article Writing,
+                          Code Generation, Multi-Agent Debate)
+agents/                   adversarial and guardian agents
+datasets/BAD-ACTS.csv     scenarios: harmful target action, target agent, keywords
+evaluation/               keyword evaluators (evaluation_functions.py) and evaluate_result.py
+ablation_summary.py       tables and figure for the intervention ablation and the no-adversary runs
+length_confound.py        correlation between message length change at k* and |CFE|
+estimate_delta_v4.py      empirical estimate of the sensitivity bound (Proposition 1);
+                          estimate_delta_v3.py is an earlier, incorrect version kept for reference
+make_figures.py           outcome decomposition and harm subcategory figures
+merge_rerun.py            merge rerun rows into a results root (old rows go to results_superseded/)
+scripts/                  launcher scripts used for the runs in the paper
+results/                  raw runs: results/results_v2_<model>_<baseline|replay>, results/results_v3_<model>_<benign|noadv>
+outputs/                  evaluation tables: outputs/outputs_<model>[_noadv]/
+figures/                  figures: figures/figures_<model>/
+```
+
+Each run is stored as
+`<root>/env=<environment>/model=<model>/adv=<adversary>[/safe=True]/row=<i>/` with `factual.json`
+(factual trajectory and team state), `tape_meta.json` (call log: agent, tape span, prompt tail and
+response of every call), `tape.pt` (the tape) and `index.json` (counterfactual runs).
 
 ## Installation
 
-To get started, clone the repository and install the required dependencies:
-
 ```bash
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+pip install transformers==4.57.3 scipy matplotlib
+huggingface-cli login     # Llama-3.1-8B-Instruct is a gated model
 ```
 
-We recommend using Python 3.10 or later.
+Python 3.10. Do not set `HF_HUB_OFFLINE=1`; with transformers 4.57.3 it breaks tokenizer loading.
 
-## Running Individual Experiments
+## Running experiments
 
-Use the `run_experiments.py` script to run standalone experiments with customizable settings for the environment, model, and agent. The script accepts the following arguments:
-
-* `--model-client` *(str)*: Specifies the model backend. Default is `llama3.1:70b`. Compatible with models hosted via [Ollama](https://ollama.com/) and OpenAI.
-* `--environment` *(str)*: Selects the experiment environment. Options: `travel_planning`, `financial_article_writing`, `code_generation`, `multi_agent_debate`. Default is `travel_planning`.
-* `--adversarial-agent` *(str)*: Specifies the adversarial agent implementation.
-* `--safe` *(flag)*: If set, uses Adversarial Action Warning (AAW) prompts instead of the default.
-* `--guardian` *(flag)*: If set, enables a guardian agent that monitors and may intervene.
-* `--id` *(int)*: Unique identifier for the experiment, useful for tracking and logging.
-
-These arguments allow for flexible, targeted evaluation of robustness in agentic systems.
-
-### Example Usage
+### Main results (neutral text and replay)
 
 ```bash
-python run_experiments.py --model-client llama3.1:70b --environment travel_planning --adversarial-agent PLANNER_AGENT
-```
-```bash
-SESSION=travel_llama8b
-GPU=0
-
-tmux new -d -s "$SESSION" \; \
-  setenv -t "$SESSION" CUDA_VISIBLE_DEVICES "$GPU" \; \
-  \
-  rename-window -t "$SESSION":0 'serve' \; \
-  send-keys   -t "$SESSION":serve \
-    'cd ~/causality-mdp && source .venv/bin/activate && ollama serve' C-m \; \
-  \
-  new-window  -t "$SESSION" -n 'safe' \; \
-  send-keys   -t "$SESSION":safe \
-    'cd ~/causality-mdp && source .venv/bin/activate && \
-     until curl -sf localhost:11434/api/version >/dev/null; do sleep 1; done; \
-     bash scripts/llama-3.1_8b/run_travel_planner_experiments.sh \
-       --n-runs 5 \
-       --safe \
-       --id safe' C-m \; \
-  \
-  new-window  -t "$SESSION" -n 'corrupted' \; \
-  send-keys   -t "$SESSION":corrupted \
-    'cd ~/causality-mdp && source .venv/bin/activate && \
-     until curl -sf localhost:11434/api/version >/dev/null; do sleep 1; done; \
-     bash scripts/llama-3.1_8b/run_travel_planner_experiments.sh \
-       --n-runs 5 \
-       --id corrupted' C-m \; \
-  \
-  new-window  -t "$SESSION" -n 'monitor' \; \
-  send-keys   -t "$SESSION":monitor 'watch -n 1 nvidia-smi' C-m \; \
-  \
-  attach      -t "$SESSION"
+CUDA_VISIBLE_DEVICES=1 python run_experiments_v2.py \
+    --backend hf --hf-model-id Qwen/Qwen3-8B --hf-dtype float16 \
+    --environment travel_planning --adversarial-agent PLANNER_AGENT \
+    --cf-agent PLANNER_AGENT --cf-selection-rule last_pre_target_agent \
+    --cf-mode baseline --cf-samples 1 --export-tape --max-new-tokens 256 \
+    --output-root results/results_v2_qwen_baseline
 ```
 
-## Running Full-Scale Experiments
+* `--cf-mode baseline` replaces the message at k\* with the neutral text of the CF agent;
+  `--cf-mode replay` injects the factual message (identity intervention, CFE must be 0).
+* `--safe` adds the Adversary-Aware Prompting instructions to the benign agents.
+* `--start-id N --end-id N` runs only row N and keeps its seed (`49 + N`); `--id N` resets the seed
+  to 49, so use `--start-id/--end-id` to rerun single rows.
+* Llama uses `--hf-model-id meta-llama/Meta-Llama-3.1-8B-Instruct --hf-dtype bfloat16`.
 
-To use GPT-based models (e.g., `gpt-4`, `gpt-3.5-turbo`) with BAD-ACTS, you must set your OpenAI API key as an environment variable before running experiments:
+Settings used for every environment:
+
+| Environment | `--environment` | `--adversarial-agent` | `--cf-agent` | `--max-new-tokens` |
+|---|---|---|---|---|
+| Travel Planning | `travel_planning` | `PLANNER_AGENT` | `PLANNER_AGENT` | 256 |
+| Code Generation | `code_generation` | `CEO` | `CEO` | 256 |
+| Multi-Agent Debate | `multi_agent_debate` | `agent_4` | `agent_0` | 256 |
+| Financial Article Writing | `financial_article_writing` | `CHIEF_EDITOR` | `RESEARCHER` | 512 |
+
+All runs sample with Gumbel-Max at temperature 0.7 without top k or top p truncation.
+
+### Benign agent intervention
+
+The message at k\* is generated by the benign version of the CF agent (the environment's own system
+prompt) on the same history, with fresh noise (seed `49 + row + 20000`). Factual runs and tapes are
+reused from the main results, so every row is paired with its neutral text row; `--no-kv-cache` keeps
+the numerics identical to `run_experiments_v2.py`.
 
 ```bash
-export OPENAI_API_KEY=your_api_key_here
+CUDA_VISIBLE_DEVICES=1 python run_experiments_v3.py --no-kv-cache \
+    --backend hf --hf-model-id Qwen/Qwen3-8B --hf-dtype float16 \
+    --environment travel_planning --adversarial-agent PLANNER_AGENT \
+    --cf-agent PLANNER_AGENT --cf-selection-rule last_pre_target_agent \
+    --cf-mode benign --cf-samples 1 --max-new-tokens 256 \
+    --factual-root results/results_v2_qwen_baseline \
+    --output-root results/results_v3_qwen_benign
 ```
 
-To replicate experiments across all agents within a specific environment using a designated adversarial agent, use the scripts in the `scripts/` directory. These batch scripts support the same command-line arguments as `run_experiments.py`.
+### Runs without an adversary
 
-### Example Script Usage
+Every scenario with all agents benign (the adversary slot keeps the environment's own agent),
+factual run only. These runs are not paired with anything, so the KV cache can be used.
 
 ```bash
-bash scripts/gpt-4.1/run_travel_planner_experiments.sh --safe --id 1
+CUDA_VISIBLE_DEVICES=1 python run_experiments_v3.py --no-adversary \
+    --backend hf --hf-model-id Qwen/Qwen3-8B --hf-dtype float16 \
+    --environment travel_planning --adversarial-agent PLANNER_AGENT --max-new-tokens 256 \
+    --output-root results/results_v3_qwen_noadv
 ```
+
+### Launcher scripts
+
+`scripts/` holds the launchers used for the paper. They read and write the folders under
+`results/`, log to `logs/`, use GPU 1 unless `GPU=<id>` is set, and skip rows that are already
+finished, so they can be restarted.
+
+```bash
+bash scripts/run_llama_env.sh <tp|mad|cg|faw> [safe]                 # Llama main runs (CF_MODE=replay for replay)
+bash scripts/run_benign.sh <qwen|llama> <tp|mad|cg|faw> [safe]       # benign agent intervention
+KV_CACHE=1 bash scripts/run_noadv.sh <qwen|llama> <tp|mad|cg|faw> [safe]   # runs without an adversary
+bash scripts/run_faw_rerun.sh <qwen|llama> <baseline|replay> <nonsafe|safe> ROW...   # rerun single FAW rows
+python merge_rerun.py [--apply]                                       # merge results/*_rerun into the main results
+```
+
+## Evaluation and analysis
+
+Run from the repository root with the venv active.
+
+```bash
+# 1. Evaluate (ASR, ACE per mode, per-row effects, replay check, harm subcategories)
+python evaluation/evaluate_result.py \
+    --baseline-root results/results_v2_qwen_baseline --replay-root results/results_v2_qwen_replay \
+    --benign-root results/results_v3_qwen_benign --output-dir outputs/outputs_qwen/
+python evaluation/evaluate_result.py --model-id meta-llama/Meta-Llama-3.1-8B-Instruct \
+    --baseline-root results/results_v2_llama_baseline --replay-root results/results_v2_llama_replay \
+    --benign-root results/results_v3_llama_benign --output-dir outputs/outputs_llama/
+python evaluation/evaluate_result.py \
+    --baseline-root results/results_v3_qwen_noadv --replay-root none --output-dir outputs/outputs_qwen_noadv/
+python evaluation/evaluate_result.py --model-id meta-llama/Meta-Llama-3.1-8B-Instruct \
+    --baseline-root results/results_v3_llama_noadv --replay-root none --output-dir outputs/outputs_llama_noadv/
+
+# 2. Length confound
+python length_confound.py --baseline-root results/results_v2_qwen_baseline \
+    --per-row outputs/outputs_qwen/per_row.csv --output-dir outputs/outputs_qwen/
+
+# 3. Intervention ablation and no-adversary tables, per-model figure, and the combined paper figure
+python ablation_summary.py --csv-dir outputs/outputs_qwen/ --noadv-csv-dir outputs/outputs_qwen_noadv/ \
+    --baseline-root results/results_v2_qwen_baseline --benign-root results/results_v3_qwen_benign \
+    --fig-dir figures/figures_qwen/
+python ablation_summary.py --combined outputs/outputs_qwen/ outputs/outputs_llama/ --fig-dir figures/
+
+# 4. Outcome decomposition and harm subcategory figures
+python make_figures.py --csv-dir outputs/outputs_qwen/ --output-dir figures/figures_qwen/
+
+# 5. Sensitivity bound (GPU)
+CUDA_VISIBLE_DEVICES=1 python estimate_delta_v4.py --model-id Qwen/Qwen3-8B --dtype float16 \
+    --baseline-root results/results_v2_qwen_baseline --per-row outputs/outputs_qwen/per_row.csv \
+    --output-dir outputs/outputs_qwen/
+```
+
+The defaults of these scripts are the Qwen folders. For Llama, pass
+`--model-id meta-llama/Meta-Llama-3.1-8B-Instruct` and the Llama folders (and `--dtype bfloat16`
+for `estimate_delta_v4.py`).
+
+Main outputs per model: `asr.csv`, `ase.csv`, `per_row.csv`, `replay_check.csv`,
+`harm_category.csv`, `intervention_ablation.csv`, `kstar_messages.csv`, `noadv_asr.csv`,
+`length_confound.csv`, `delta_estimates.csv`.
+
+## Reproducibility notes
+
+* **A tape is only valid on the setup that recorded it.** KV caching, a different GPU, or different
+  software versions change floating point results and can flip nearly tied argmax decisions, which
+  breaks the pairing between factual and counterfactual runs. Run factual and counterfactual on the
+  same machine and software, and do not mix `--no-kv-cache` settings (resuming refuses to).
+* **Seeds.** The factual run of row `i` uses seed `49 + i`.
+* **Tools must be deterministic.** Randomness outside the tape breaks the coupling. The image tool
+  of Financial Article Writing derives its ID from a hash of the prompt for this reason.
+* **Multi-Agent Debate parser.** The original BAD-ACTS answer parser required exactly one character
+  between the `<ANSWER>` tags and parsed almost none of the answers both models produce;
+  `evaluation/evaluation_functions.py` reads the first option letter after the opening tag.
+* **Code Generation safe condition.** BAD-ACTS adds the safety instruction only to the CEO, which is
+  the adversary, so safe and non-safe runs coincide in this environment.
+* **Superseded rows.** `results/results_superseded/` keeps rows that were rerun (other GPU or wrong
+  seed, or random image IDs); the `results/*_rerun/` folders held those reruns before
+  `merge_rerun.py --apply` moved them into the main results and are now empty.
+
+## Acknowledgement
+
+The environments, adversarial agents, scenarios and keyword evaluators come from the BAD-ACTS
+benchmark (*Benchmarking the Robustness of Agentic Systems to Adversarially-Induced Harmful
+Actions*), which this repository extends with the Gumbel-Max tape, the counterfactual analysis and the
+fixes listed above.

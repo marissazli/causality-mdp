@@ -4,25 +4,25 @@ evaluate_result.py  (v2 — multi-mode evaluation)
 Walks baseline and replay results directories and produces CSVs needed for
 all paper figures:
 
-  outputs/asr.csv              — ASR per (environment, safe)
-  outputs/ase.csv              — ASE per (environment, safe, cf_mode)
-  outputs/per_row.csv          — per-row causal effect (all modes)
-  outputs/replay_check.csv     — replay causal effects (sanity check)
-  outputs/harm_category.csv    — causal effect joined with BAD-ACTS harm category
+  <output-dir>/asr.csv              — ASR per (environment, safe)
+  <output-dir>/ase.csv              — ASE per (environment, safe, cf_mode)
+  <output-dir>/per_row.csv          — per-row causal effect (all modes)
+  <output-dir>/replay_check.csv     — replay causal effects (sanity check)
+  <output-dir>/harm_category.csv    — causal effect joined with BAD-ACTS harm category
 
 Usage:
     python evaluate_result.py \
-        --baseline-root results_v2_qwen_baseline \
-        --replay-root results_v2_qwen_replay \
+        --baseline-root results/results_v2_qwen_baseline \
+        --replay-root results/results_v2_qwen_replay \
         --dataset datasets/BAD-ACTS.csv \
-        --output-dir outputs/
+        --output-dir outputs/outputs_qwen/
 
     For another model, pass its HF id (or results folder name) and keep outputs separate:
     python evaluate_result.py \
         --model-id meta-llama/Meta-Llama-3.1-8B-Instruct \
-        --baseline-root results_v2_llama_baseline \
-        --replay-root results_v2_llama_replay \
-        --output-dir outputs_llama/
+        --baseline-root results/results_v2_llama_baseline \
+        --replay-root results/results_v2_llama_replay \
+        --output-dir outputs/outputs_llama/
 """
 
 from argparse import ArgumentParser
@@ -213,15 +213,15 @@ def scan_results_root(root, environment, safe, cf_mode, eval_fn, model_id="Qwen/
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument("--baseline-root", type=str, default="results_v2_qwen_baseline")
-    parser.add_argument("--replay-root", type=str, default="results_v2_qwen_replay")
+    parser.add_argument("--baseline-root", type=str, default="results/results_v2_qwen_baseline")
+    parser.add_argument("--replay-root", type=str, default="results/results_v2_qwen_replay")
     parser.add_argument("--benign-root", type=str, default=None,
                         help="Optional results root from run_experiments_v3.py --cf-mode benign; "
                              "added as cf_mode=benign in ase.csv / per_row.csv.")
     parser.add_argument("--dataset", type=str, default="datasets/BAD-ACTS.csv")
     parser.add_argument("--model-id", type=str, default="Qwen/Qwen3-8B",
                         help="HF model id (or results folder name) used for the model=<name> directory.")
-    parser.add_argument("--output-dir", type=str, default="outputs/")
+    parser.add_argument("--output-dir", type=str, default="outputs/outputs_qwen/")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)

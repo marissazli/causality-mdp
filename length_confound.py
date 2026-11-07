@@ -11,7 +11,8 @@ which is ~10 tokens / ~52 characters.
 
 For each row we extract:
   - len_factual: character length of the CF agent's message at call k*
-  - len_cf: character length of the neutral baseline text (constant)
+  - len_cf: character length of the neutral text actually used at k* (cf_text;
+            agent-specific, 80-95 chars; falls back to CF_BASELINE_TEXT)
   - len_diff: |len_factual - len_cf|
   - cfe: causal_effect_mean from per_row.csv
 
@@ -19,9 +20,9 @@ Then compute Pearson and Spearman correlations between len_diff and |cfe|.
 
 Usage:
     python length_confound.py \
-        --baseline-root results_v2_qwen_baseline \
-        --per-row outputs/per_row.csv \
-        --output-dir outputs/
+        --baseline-root results/results_v2_qwen_baseline \
+        --per-row outputs/outputs_qwen/per_row.csv \
+        --output-dir outputs/outputs_qwen/
 
     Add --model-id meta-llama/Meta-Llama-3.1-8B-Instruct (and the llama roots/outputs) for Llama.
 """
@@ -51,9 +52,8 @@ def safe_model_name(model_id="Qwen/Qwen3-8B"):
 
 def get_factual_message_length(baseline_root, environment, safe, row_id, model_id="Qwen/Qwen3-8B"):
     """
-    Extract the character length of the CF agent's factual message at k*
-    directly from the intervention dict stored in index.json under
-    'factual_response_text'.
+    Extract (len factual k* message, len neutral text used at k*) from the
+    intervention dict stored in index.json ('factual_response_text', 'cf_text').
     """
     model_name = safe_model_name(model_id)
     adv = ADV_AGENTS[environment]
@@ -75,16 +75,16 @@ def get_factual_message_length(baseline_root, environment, safe, row_id, model_i
     # factual_response_text is stored directly in the intervention dict
     factual_text = intervention.get("factual_response_text", "")
     if factual_text:
-        return len(factual_text)
+        return len(factual_text), len(intervention.get("cf_text") or CF_BASELINE_TEXT)
 
     return None
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--baseline-root", default="results_v2_qwen_baseline")
-    parser.add_argument("--per-row", default="outputs/per_row.csv")
-    parser.add_argument("--output-dir", default="outputs/")
+    parser.add_argument("--baseline-root", default="results/results_v2_qwen_baseline")
+    parser.add_argument("--per-row", default="outputs/outputs_qwen/per_row.csv")
+    parser.add_argument("--output-dir", default="outputs/outputs_qwen/")
     parser.add_argument("--model-id", default="Qwen/Qwen3-8B",
                         help="HF model id (or results folder name) used for the model=<name> directory.")
     args = parser.parse_args()
@@ -114,9 +114,9 @@ if __name__ == "__main__":
         )
         lengths.append(length)
 
-    baseline["len_factual"] = lengths
-    baseline["len_cf"] = LEN_CF
-    baseline["len_diff"] = (baseline["len_factual"] - LEN_CF).abs()
+    baseline["len_factual"] = [l[0] if l else None for l in lengths]
+    baseline["len_cf"] = [l[1] if l else None for l in lengths]
+    baseline["len_diff"] = (baseline["len_factual"] - baseline["len_cf"]).abs()
     baseline["cfe_abs"] = baseline["causal_effect_mean"].abs()
 
     # drop rows where length extraction failed
@@ -127,7 +127,7 @@ if __name__ == "__main__":
 
     print(f"\nRows with valid lengths: {len(valid)}")
     print(f"Mean factual message length: {valid['len_factual'].mean():.1f} chars")
-    print(f"Fixed CF baseline length:    {LEN_CF} chars")
+    print(f"Mean neutral text length:    {valid['len_cf'].mean():.1f} chars")
     print(f"Mean |len_diff|:             {valid['len_diff'].mean():.1f} chars")
 
     # ── Correlation analysis ───────────────────────────────────────────────────
@@ -177,6 +177,6 @@ if __name__ == "__main__":
     print(f"\nSaved → {corr_path}")
 
     detail_path = os.path.join(args.output_dir, "length_confound_detail.csv")
-    valid[["environment", "safe", "row_id", "len_factual", "len_diff",
+    valid[["environment", "safe", "row_id", "len_factual", "len_cf", "len_diff",
            "causal_effect_mean", "cfe_abs"]].to_csv(detail_path, index=False)
     print(f"Saved → {detail_path}")

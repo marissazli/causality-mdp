@@ -10,7 +10,7 @@ Three figures (no redundancy with Tables 1-3 in the paper):
   fig3_harm_category.pdf   — causal effect by BAD-ACTS harm sub-category
 
 Usage:
-    python make_figures.py --csv-dir outputs/ --output-dir figures/
+    python make_figures.py --csv-dir outputs/outputs_qwen/ --output-dir figures/figures_qwen/
 """
 
 import os
@@ -26,18 +26,8 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # ── Style ─────────────────────────────────────────────────────────────────────
-plt.rcParams.update({
-    "font.family": "serif",
-    "font.size": 10,
-    "axes.titlesize": 11,
-    "axes.labelsize": 10,
-    "xtick.labelsize": 9,
-    "ytick.labelsize": 9,
-    "legend.fontsize": 9,
-    "figure.dpi": 150,
-    "savefig.bbox": "tight",
-    "savefig.pad_inches": 0.05,
-})
+import paper_style as ps
+ps.apply()
 
 ENV_LABELS = {
     "travel_planning": "Travel Planning",
@@ -223,173 +213,128 @@ def fig_framework(output_dir):
 # ── Figure 2: Outcome (y_factual, y_cf) transitions per env x safe ───────────
 def fig_transitions(per_row, output_dir):
     """
-    For each environment, show the four-way decomposition of factual/CF outcomes:
-      (y_f=1, y_cf=1)  harm preserved
-      (y_f=1, y_cf=0)  harm prevented   <- causal evidence the intervention helped
-      (y_f=0, y_cf=1)  harm induced     <- intervention created new harm
-      (y_f=0, y_cf=0)  no harm in either
-    Rendered as horizontally stacked bars (one bar per safe condition), counts
-    on the x-axis. Adds info beyond Table 3 by separating prevention from induction.
+    Outcome decomposition per environment and safety condition (neutral text
+    intervention): each scenario's (y_factual, y_cf) pair is
+      harm preserved (1,1), harm prevented (1,0), harm induced (0,1), no harm (0,0).
+    Drawn at 0.85 of the text width, as included in the paper.
     """
     base = per_row[per_row["cf_mode"] == "baseline"].copy()
     if len(base) == 0:
         print("  [skip] no baseline rows for fig_transitions")
         return None
-
     base["y_factual"] = base["y_factual"].astype(int)
-    # causal_effect_mean is in {-1, 0, +1} when cf_samples == 1 (which is our setup)
-    def label_row(yf, ce):
+
+    def label_row(yf, ce):  # causal_effect_mean is in {-1, 0, +1} with one CF sample
         if yf == 1 and ce == 0:
-            return "Harm preserved"      # (1, 1)
+            return "Harm preserved"
         if yf == 1 and ce <= -0.5:
-            return "Harm prevented"       # (1, 0)
+            return "Harm prevented"
         if yf == 0 and ce >= 0.5:
-            return "Harm induced"         # (0, 1)
-        return "No harm in either"        # (0, 0)
+            return "Harm induced"
+        return "No harm in either run"
 
-    base["category"] = [label_row(yf, ce) for yf, ce in
-                        zip(base["y_factual"], base["causal_effect_mean"])]
-
-    cats = ["Harm preserved", "Harm prevented", "Harm induced", "No harm in either"]
-    cat_colors = {
-        "Harm preserved":   "#b2182b",   # dark red — bad, attack succeeded both runs
-        "Harm prevented":   "#4393c3",   # blue — causal evidence
-        "Harm induced":     "#f4a582",   # light red — intervention caused new harm
-        "No harm in either": "#dddddd",  # grey — uninteresting
-    }
+    base["category"] = [label_row(yf, ce) for yf, ce in zip(base["y_factual"], base["causal_effect_mean"])]
+    cats = ["Harm preserved", "Harm prevented", "Harm induced", "No harm in either run"]
+    colors = {"Harm preserved": ps.RED, "Harm prevented": ps.BLUE,
+              "Harm induced": ps.GOLD, "No harm in either run": ps.GRAY}
+    text_on = {"Harm preserved": "white", "Harm prevented": "white",
+               "Harm induced": ps.INK, "No harm in either run": ps.INK}
 
     envs = [e for e in ENV_ORDER if e in base["environment"].values]
-    n_env = len(envs)
-
-    fig, axes = plt.subplots(n_env, 1, figsize=(8.0, 1.2 * n_env + 0.6),
-                             sharex=False, squeeze=False)
-    axes = axes[:, 0]
-
-    for ax, env in zip(axes, envs):
+    fig, axes = plt.subplots(len(envs), 1, figsize=(0.85 * ps.TEXTWIDTH, 0.72 * len(envs) + 0.45),
+                             squeeze=False, layout="constrained")
+    for ax, env in zip(axes[:, 0], envs):
         sub = base[base["environment"] == env]
-        # one bar per safe condition
-        rows_data = []
-        labels = []
+        rows, labels = [], []
         for safe_val, lbl in [(False, "Non-safe"), (True, "Safe")]:
             chunk = sub[sub["safe"] == safe_val]
-            if len(chunk) == 0:
-                continue
-            counts = {c: int((chunk["category"] == c).sum()) for c in cats}
-            rows_data.append(counts)
-            labels.append(f"{lbl}\n(n={len(chunk)})")
-
-        if not rows_data:
-            ax.set_visible(False)
-            continue
-
-        y_pos = np.arange(len(rows_data))
-        left = np.zeros(len(rows_data))
+            if len(chunk):
+                rows.append({c: int((chunk["category"] == c).sum()) for c in cats})
+                labels.append(lbl)
+        n = sum(rows[0].values())
+        y = np.arange(len(rows))
+        left = np.zeros(len(rows))
         for c in cats:
-            vals = np.array([d[c] for d in rows_data])
-            ax.barh(y_pos, vals, left=left, color=cat_colors[c],
-                    edgecolor="white", linewidth=0.8, label=c, height=0.6)
-            # in-bar count labels for non-trivial segments
-            for yi, v, l in zip(y_pos, vals, left):
+            vals = np.array([r[c] for r in rows])
+            ax.barh(y, vals, left=left, color=colors[c], edgecolor="white", linewidth=0.6,
+                    height=0.62, label=c)
+            for yi, v, l in zip(y, vals, left):
                 if v >= 2:
-                    ax.text(l + v / 2, yi, str(v), ha="center", va="center",
-                            fontsize=8.5, color="white" if c != "No harm in either" else "#333")
+                    ax.text(l + v / 2, yi, str(v), ha="center", va="center", fontsize=7,
+                            color=text_on[c])
             left += vals
-
-        ax.set_yticks(y_pos)
-        ax.set_yticklabels(labels)
-        ax.set_xlabel("Scenarios" if env == envs[-1] else "")
-        ax.set_title(ENV_LABELS.get(env, env).replace("\n", " "), loc="left",
-                     fontsize=10, pad=2)
+        ax.set_yticks(y, labels)
         ax.invert_yaxis()
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
+        ax.set_xlim(0, n)
+        ax.set_title(f"{ENV_LABELS.get(env, env).replace(chr(10), ' ')} ($n={n}$)", loc="left")
         ax.spines["left"].set_visible(False)
         ax.tick_params(axis="y", length=0)
-        ax.tick_params(axis="x", labelsize=8)
-        ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
-
-    # single legend at the top
-    handles = [mpatches.Patch(facecolor=cat_colors[c], edgecolor="white", label=c) for c in cats]
-    fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 1.02),
-               ncol=4, frameon=False, fontsize=9, handlelength=1.2, columnspacing=1.6)
-
-    fig.tight_layout(rect=[0, 0, 1, 0.96])
-    return save(fig, "fig2_transitions", output_dir)
+        ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True, nbins=6))
+    axes[-1, 0].set_xlabel("Scenarios")
+    handles = [mpatches.Patch(facecolor=colors[c], edgecolor="none", label=c) for c in cats]
+    fig.legend(handles=handles, loc="outside upper center", ncol=4)
+    return ps.save(fig, os.path.join(output_dir, "fig2_transitions"))
 
 
 # ── Figure 3: Harm sub-category causal effect (cleaned) ──────────────────────
 def fig_harm(harm, output_dir):
     """
-    Mean causal effect by BAD-ACTS harm sub-category, baseline + non-safe only,
-    and only for environments with at least one non-zero observation.
+    Mean causal effect by BAD-ACTS harm subcategory, neutral text intervention,
+    non-safe condition. One panel per environment with a nonzero effect, stacked
+    vertically at full text width; subcategories with zero effect are omitted.
+    Negative (harm prevented) is blue and positive (harm induced) red, as in fig2.
     """
-    base = harm[(harm["cf_mode"] == "baseline") &
-                (harm["safe"] == False) &
+    base = harm[(harm["cf_mode"] == "baseline") & (harm["safe"] == False) &
                 harm["Sub-Category"].notna()].copy()
     if len(base) == 0:
         print("  [skip] no harm category data")
         return None
-
-    # drop environments where every category has zero effect (uninformative panel)
-    keep_envs = []
+    panels = []
     for env in ENV_ORDER:
         sub = base[base["environment"] == env]
-        if len(sub) == 0:
-            continue
-        if (sub["causal_effect_mean"].abs() > 0).any():
-            keep_envs.append(env)
-
-    if not keep_envs:
+        cat = (sub.groupby("Sub-Category")
+                  .agg(ase=("causal_effect_mean", "mean"), n=("causal_effect_mean", "count"))
+                  .reset_index())
+        cat = cat[cat["ase"].abs() > 0].sort_values("ase")
+        if len(cat):
+            panels.append((env, cat))
+    if not panels:
         print("  [skip] all envs have zero effect across categories")
         return None
 
-    n = len(keep_envs)
-    fig, axes = plt.subplots(1, n, figsize=(4.4 * n, 4.2), squeeze=False)
-    axes = axes[0]
-
-    for ax, env in zip(axes, keep_envs):
-        sub = base[base["environment"] == env]
-        cat_ase = (
-            sub.groupby("Sub-Category")
-               .agg(ase=("causal_effect_mean", "mean"),
-                    n=("causal_effect_mean", "count"))
-               .reset_index()
-        )
-        cat_ase = cat_ase[cat_ase["ase"].abs() > 0].sort_values("ase")  # drop zero rows
-        if len(cat_ase) == 0:
-            ax.set_visible(False)
-            continue
-
-        colors = ["#b2182b" if v < 0 else "#4393c3" for v in cat_ase["ase"]]
-        labels = [f"{c}  (n={n})" for c, n in zip(cat_ase["Sub-Category"], cat_ase["n"])]
-        ax.barh(np.arange(len(cat_ase)), cat_ase["ase"], color=colors,
-                edgecolor="white", linewidth=0.8)
-        ax.set_yticks(np.arange(len(cat_ase)))
-        ax.set_yticklabels(labels, fontsize=9)
-        ax.axvline(0, color="black", linewidth=0.7)
-        ax.set_xlabel("Mean causal effect")
-        ax.set_title(ENV_LABELS.get(env, env).replace("\n", " "))
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        ax.grid(axis="x", alpha=0.25, linewidth=0.5)
-
-    fig.suptitle("Causal effect by harm sub-category (baseline, non-safe)",
-                 y=1.02, fontsize=11)
-    fig.tight_layout()
-    return save(fig, "fig3_harm_category", output_dir)
+    lim = max(c["ase"].abs().max() for _, c in panels) * 1.08
+    heights = [len(c) + 1.2 for _, c in panels]
+    fig, axes = plt.subplots(len(panels), 1, figsize=(ps.TEXTWIDTH, 0.17 * sum(heights) + 0.35),
+                             gridspec_kw={"height_ratios": heights}, sharex=True,
+                             squeeze=False, layout="constrained")
+    for ax, (env, cat) in zip(axes[:, 0], panels):
+        y = np.arange(len(cat))
+        colors = [ps.BLUE if v < 0 else ps.RED for v in cat["ase"]]
+        ax.barh(y, cat["ase"], color=colors, height=0.62, zorder=2)
+        ax.set_yticks(y, [f"{c[:1].upper() + c[1:].replace('_', ' ')} ($n={k}$)" for c, k in zip(cat["Sub-Category"], cat["n"])])
+        ax.axvline(0, color=ps.INK, linewidth=0.6, zorder=3)
+        ax.grid(axis="x", color=ps.GRID, linewidth=0.5, zorder=0)
+        ax.set_xlim(-lim, lim)
+        ax.set_ylim(-0.6, len(cat) - 0.4)
+        ax.tick_params(axis="y", length=0)
+        ax.spines["left"].set_visible(False)
+        ax.set_title(ENV_LABELS.get(env, env).replace("\n", " "), loc="left")
+    axes[-1, 0].set_xlabel("ACE (negative: harm prevented, positive: harm induced)")
+    return ps.save(fig, os.path.join(output_dir, "fig3_harm_category"))
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--csv-dir", default="outputs/")
-    parser.add_argument("--output-dir", default="figures/")
+    parser.add_argument("--csv-dir", default="outputs/outputs_qwen/")
+    parser.add_argument("--output-dir", default="figures/figures_qwen/")
     parser.add_argument("--skip-framework", action="store_true",
                         help="skip the no-data framework schematic")
     args = parser.parse_args()
 
-    print("Generating framework figure (no data needed)...")
-    fig_framework(args.output_dir)
+    if not args.skip_framework:
+        print("Generating framework figure (no data needed)...")
+        fig_framework(args.output_dir)
 
     print("\nLoading CSVs...")
     per_row_path = os.path.join(args.csv_dir, "per_row.csv")

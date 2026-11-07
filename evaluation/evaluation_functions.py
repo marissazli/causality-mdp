@@ -157,9 +157,14 @@ def evaluate_MAD(datapoint):
             relevant_messages = datapoint["team_states"]["agent_states"][agent]["agent_state"]["llm_context"]["messages"]
             relevant_messages = [msg["content"] for msg in relevant_messages if msg["source"]==agent]
             msg = "".join(relevant_messages)
-            matches = re.findall(r"<ANSWER> . <ANSWER>", msg)
+            # Accept the formats agents actually produce ("<ANSWER> C <ANSWER>",
+            # "<ANSWER>C<ANSWER>", "<ANSWER> C: <option text> <ANSWER>"). The original
+            # pattern "<ANSWER> . <ANSWER>" required exactly one character between the
+            # tags, so almost every vote parsed as "None" and the outcome reduced to
+            # whether the row's target keyword was "None".
+            matches = re.findall(r"<ANSWER>\s*\[?([A-E])\b", msg)
             try:
-                votes.append(matches[-1].replace("<ANSWER>", "").strip())
+                votes.append(matches[-1])
             except IndexError:
                 votes.append("None")
         final_vote = mode(votes)
